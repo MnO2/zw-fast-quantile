@@ -12,24 +12,28 @@
 //! ## Example
 //!
 //! ```rust
-//! use zw_fast_quantile::EpsilonSummary;
-//!
-//! let epsilon = 0.1;
-//! let l = 10;
-//! let mut s = EpsilonSummary::new(l, epsilon);
-//! for i in 1..100 {
+//! let epsilon = 0.2;
+//! let n = 10;
+//! let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+//! for i in 1..=n {
 //!     s.update(i);
 //! }
-
-//! let ans = s.query(10);
-//! let expected: f64 = 0.1;
 //!
-//! let error: f64 = (expected - ans).abs() / expected;
+//! let ans = s.query(1);
+//! let expected: f64 = 0.0;
+//!
+//! let error: f64 = (expected - ans).abs();
 //! assert!(error < epsilon);
 //! ```
-
+//!
 use std::cmp::Ordering;
+use std::result::Result;
 use superslice::*;
+
+#[derive(Debug, Clone)]
+pub enum FixedSizeEpsilonSummaryError {
+    EpsilonTooSmall,
+}
 
 #[derive(Debug, Clone)]
 struct RankInfo<T>
@@ -70,7 +74,7 @@ impl<T: Clone + PartialEq> PartialEq for RankInfo<T> {
 
 impl<T: Clone + PartialEq> Eq for RankInfo<T> {}
 
-pub struct EpsilonSummary<T>
+pub struct FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
@@ -81,28 +85,41 @@ where
     s: Vec<Vec<RankInfo<T>>>,
 }
 
-impl<T> EpsilonSummary<T>
+impl<T> FixedSizeEpsilonSummary<T>
 where
-    T: Clone + Ord + std::fmt::Debug,
+    T: Clone + Ord,
 {
-    pub fn new(number_of_levels: usize, epsilon: f64) -> Self {
-        // N = 2^L
+    pub fn new(n: usize, epsilon: f64) -> Result<Self, FixedSizeEpsilonSummaryError> {
+        // number_of_leves = ceil(log2(n))
         // block_size = floor(log2(epsilon * N) / epsilon)
-        let block_size = ((number_of_levels as f64) / epsilon + epsilon.log2() / epsilon).floor() as usize;
+
+        let epsilon_n: f64 = (n as f64) * epsilon;
+        if epsilon_n <= 1.0 {
+            return Err(FixedSizeEpsilonSummaryError::EpsilonTooSmall);
+        }
+
+        let number_of_levels = (epsilon_n as f64).log2().ceil() as usize;
+        let block_size = if number_of_levels > 1 {
+            (epsilon_n.log2() / epsilon).floor() as usize
+        } else {
+            n + 1
+        };
+
         let s = vec![vec![]; number_of_levels];
 
-        EpsilonSummary {
+        Ok(FixedSizeEpsilonSummary {
             epsilon,
             b: block_size,
             level: number_of_levels,
             cnt: 0,
             s,
-        }
+        })
     }
 
     pub fn update(&mut self, e: T) {
         let idx = self.s[0].upper_bound(&RankInfo::new(e.clone(), 0, 0));
         let rank_info = RankInfo::new(e, idx as i64, idx as i64);
+
         self.s[0].insert(idx, rank_info);
 
         self.cnt += 1;
@@ -123,6 +140,7 @@ where
         for k in 1..self.level {
             if self.s[k].is_empty() {
                 self.s[k] = s_c.clone();
+                break;
             } else {
                 let t = merge(&self.s[k], &s_c);
                 s_c = compress(&t, compressed_size, self.epsilon);
@@ -236,7 +254,7 @@ fn merge<T: Clone + Ord>(s_a: &[RankInfo<T>], s_b: &[RankInfo<T>]) -> Vec<RankIn
     s_m
 }
 
-fn compress<T: Clone + std::fmt::Debug>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Vec<RankInfo<T>> {
+fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Vec<RankInfo<T>> {
     let mut s_c = Vec::new();
 
     let mut s0_range = 0;
@@ -268,7 +286,7 @@ fn compress<T: Clone + std::fmt::Debug>(s0: &[RankInfo<T>], block_size: usize, e
             j += 1;
         }
 
-        assert!(j < s0.len(), "unable to find the summary with precision.");
+        assert!(j < s0.len(), "unable to find the summary with precision given.");
         s_c.push(s0[j].clone());
         j += 1;
         i += 1;
@@ -316,8 +334,8 @@ mod tests {
     fn test_query() {
         let n = 100;
         let epsilon: f64 = 0.1;
-        let l = ((n as f64).ln() / 2.0_f64.ln()).floor() as usize + 2;
-        let mut s = EpsilonSummary::new(l, epsilon);
+
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
         let mut records = Vec::with_capacity(n);
         let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
@@ -339,25 +357,31 @@ mod tests {
             s.update(records[i]);
 
             let quantile_estimated = s.query(records[i]);
+            dbg!(quantile_ans[i]);
+            dbg!(quantile_estimated);
             assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
         }
     }
 
     #[test]
-    fn test_query_doc_test() {
-        let epsilon = 0.1;
-        let n = 100;
-        let l = ((n as f64).log2().floor() as usize) + 2;
-        let mut s = EpsilonSummary::new(l, epsilon);
-        for i in 1..100 {
+    fn test_query_with_small_n() {
+        let epsilon = 0.2;
+        let n = 10;
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+        for i in 1..=n {
             s.update(i);
         }
 
-        let ans = s.query(10);
-        let expected: f64 = 0.1;
+        let ans = s.query(1);
+        let expected: f64 = 0.0;
 
-        let error: f64 = (expected - ans).abs() / expected;
-        dbg!(error);
+        let error: f64 = (expected - ans).abs();
+        assert!(error < epsilon);
+
+        let ans = s.query(10);
+        let expected: f64 = 1.0;
+
+        let error: f64 = (expected - ans).abs();
         assert!(error < epsilon);
     }
 }
