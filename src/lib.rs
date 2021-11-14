@@ -75,6 +75,7 @@ impl<T: Clone + PartialEq> PartialEq for RankInfo<T> {
 
 impl<T: Clone + PartialEq> Eq for RankInfo<T> {}
 
+#[derive(Clone)]
 pub struct FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
@@ -176,6 +177,27 @@ where
         } else {
             quantile
         }
+    }
+
+    fn calc_s_m(&mut self, epsilon: f64) -> Vec<RankInfo<T>> {
+        self.s[0].sort();
+        for (i, r) in self.s[0].iter_mut().enumerate() {
+            r.rmin = i as i64;
+            r.rmax = i as i64;
+        }
+
+        let mut s_m = self.s[0].clone();
+        for i in 1..self.level {
+            s_m = merge(&s_m, &self.s[i])
+        }
+
+        compress(&s_m, self.b, epsilon)
+    }
+
+    fn finalize(&mut self, epsilon: f64) {
+        let s_m = self.calc_s_m(epsilon);
+        self.s.clear();
+        self.s.push(s_m);
     }
 
     #[inline]
@@ -296,6 +318,90 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
     s_c
 }
 
+fn is_power_of_two(x: usize) -> bool {
+    (x & (x - 1)) == 0
+}
+
+#[derive(Debug, Clone)]
+pub enum UnboundEpsilonSummaryError {
+    EpsilonTooSmall,
+}
+
+pub struct UnboundEpsilonSummary<T>
+where
+    T: Clone + Ord,
+{
+    epsilon: f64,
+    cnt: usize,
+    s: Vec<FixedSizeEpsilonSummary<T>>,
+    s_c: FixedSizeEpsilonSummary<T>,
+}
+
+impl<T> UnboundEpsilonSummary<T>
+where
+    T: Clone + Ord,
+{
+    pub fn new(epsilon: f64) -> Result<Self, UnboundEpsilonSummaryError> {
+        let s = vec![];
+
+        let n = (1.0_f64 / epsilon).floor() as usize;
+        let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0).unwrap();
+        Ok(UnboundEpsilonSummary {
+            epsilon,
+            cnt: 0,
+            s,
+            s_c,
+        })
+    }
+
+    pub fn update(&mut self, e: T) {
+        let x = (((self.cnt + 1) as f64) * self.epsilon + 1.0).ceil() as usize;
+
+        if is_power_of_two(x) {
+            self.s_c.finalize(self.epsilon / 2.0);
+            self.s.push(self.s_c.clone());
+
+            let upper_bound = (((x + x - 1) as f64) / self.epsilon).floor() as usize;
+            let n = upper_bound - self.cnt - 1;
+            let summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0).unwrap();
+            self.s_c = summary;
+        } else {
+            self.s_c.update(e);
+        }
+    }
+
+    pub fn query(&mut self, e: T) -> f64 {
+        let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
+
+        for i in 0..self.s.len() {
+            for j in 0..self.s[i].s.len() {
+                s_m = merge(&s_m, &self.s[i].s[j])
+            }
+        }
+
+        let mut i = 0;
+        while i < s_m.len() {
+            if s_m[i].val >= e {
+                break;
+            }
+
+            i += 1;
+        }
+
+        let quantile: f64 = ((s_m[i].rmin + s_m[i].rmax) as f64) / (2.0_f64 * self.cnt as f64);
+        if quantile < 0.0_f64 {
+            0.0_f64
+        } else {
+            quantile
+        }
+    }
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.cnt
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn test_randomly_generated_seq() {
+    fn test_randomly_generated_seq_on_fixedsize_summary() {
         let mut rng = rand::thread_rng();
         let n = rng.gen_range(100..10000);
         let epsilon: f64 = rng.gen_range(0.01..0.2);
@@ -364,10 +470,27 @@ mod tests {
     }
 
     #[test]
-    fn test_query_with_small_n() {
+    fn test_query_with_small_n_on_fixedsize_summary() {
         let epsilon = 0.2;
         let n = 10;
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+        for i in 1..=n {
+            s.update(i);
+        }
+
+        for i in 1..=n {
+            let ans = s.query(i);
+            let expected: f64 = (i as f64) / (n as f64);
+            let error: f64 = (expected - ans).abs();
+            assert!(error < epsilon);
+        }
+    }
+
+    #[test]
+    fn test_query_on_unbound_summary() {
+        let epsilon = 0.2;
+        let n = 100;
+        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
         for i in 1..=n {
             s.update(i);
         }
