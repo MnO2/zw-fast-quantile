@@ -12,6 +12,8 @@
 //! ## Example
 //!
 //! ```rust
+//! use zw_fast_quantile::FixedSizeEpsilonSummary;
+//!
 //! let epsilon = 0.2;
 //! let n = 10;
 //! let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
