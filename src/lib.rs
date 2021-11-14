@@ -30,7 +30,6 @@
 //!
 use std::cmp::Ordering;
 use std::result::Result;
-use superslice::*;
 
 #[derive(Debug, Clone)]
 pub enum FixedSizeEpsilonSummaryError {
@@ -119,10 +118,8 @@ where
     }
 
     pub fn update(&mut self, e: T) {
-        let idx = self.s[0].upper_bound(&RankInfo::new(e.clone(), 0, 0));
-        let rank_info = RankInfo::new(e, idx as i64, idx as i64);
-
-        self.s[0].insert(idx, rank_info);
+        let rank_info = RankInfo::new(e, 0, 0);
+        self.s[0].push(rank_info);
 
         self.cnt += 1;
         let n = self.s[0].len();
@@ -130,6 +127,7 @@ where
             return;
         }
 
+        self.s[0].sort();
         for (i, r) in self.s[0].iter_mut().enumerate() {
             r.rmin = i as i64;
             r.rmax = i as i64;
@@ -152,6 +150,7 @@ where
     }
 
     pub fn query(&mut self, e: T) -> f64 {
+        self.s[0].sort();
         for (i, r) in self.s[0].iter_mut().enumerate() {
             r.rmin = i as i64;
             r.rmax = i as i64;
