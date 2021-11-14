@@ -7,15 +7,15 @@ where
     T: Clone,
 {
     val: T,
-    rmin: usize,
-    rmax: usize,
+    rmin: i64,
+    rmax: i64,
 }
 
 impl<T> RankInfo<T>
 where
     T: Clone,
 {
-    fn new(val: T, rmin: usize, rmax: usize) -> Self {
+    fn new(val: T, rmin: i64, rmax: i64) -> Self {
         return RankInfo { val, rmin, rmax };
     }
 }
@@ -70,7 +70,7 @@ where
 
     pub fn update(&mut self, e: T) {
         let idx = self.S[0].upper_bound(&RankInfo::new(e.clone(), 0, 0));
-        let rank_info = RankInfo::new(e, idx, idx);
+        let rank_info = RankInfo::new(e, idx as i64, idx as i64);
         self.S[0].insert(idx, rank_info);
 
         self.cnt += 1;
@@ -79,9 +79,9 @@ where
             return;
         }
 
-        for i in 0..n {
-            self.S[0][i].rmin = i;
-            self.S[0][i].rmax = i;
+        for (i, r) in self.S[0].iter_mut().enumerate() {
+            r.rmin = i as i64;
+            r.rmax = i as i64;
         }
 
         let compressed_size = self.b / 2;
@@ -101,10 +101,9 @@ where
     }
 
     pub fn query(&mut self, e: T) -> f64 {
-        let n = self.S[0].len();
-        for i in 0..n {
-            self.S[0][i].rmin = i;
-            self.S[0][i].rmax = i;
+        for (i, r) in self.S[0].iter_mut().enumerate() {
+            r.rmin = i as i64;
+            r.rmax = i as i64;
         }
 
         let mut Sm = self.S[0].clone();
@@ -228,7 +227,7 @@ fn compress<T: Clone + std::fmt::Debug>(S0: &Vec<RankInfo<T>>, B: usize, epsilon
     let mut i = 0;
     let mut j = 0;
     while i <= B && j < S0.len() {
-        let r = ((i as f64) * (S0_range as f64) / (B as f64)).floor() as usize;
+        let r = ((i as f64) * (S0_range as f64) / (B as f64)).floor() as i64;
 
 
         while j < S0.len() {
