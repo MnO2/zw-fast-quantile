@@ -1,6 +1,7 @@
 # zw-fast-quantile
 
 [![CI](https://github.com/MnO2/zw-fast-quantile/actions/workflows/CI.yml/badge.svg)](https://github.com/MnO2/zw-fast-quantile/actions/workflows/CI.yml)
+[![Crates.io](https://img.shields.io/crates/v/zw-fast-quantile.svg)](https://crates.io/crates/zw-fast-quantile)
 
 Zhang Wang Fast Approximate Quantiles Algorithm in Rust. [Paper](http://web.cs.ucla.edu/~weiwang/paper/SSDBM07_2.pdf)
 
