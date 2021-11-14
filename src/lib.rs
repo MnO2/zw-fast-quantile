@@ -434,33 +434,31 @@ mod tests {
 
     #[test]
     fn test_randomly_generated_seq_on_fixedsize_summary() {
-        let mut rng = rand::thread_rng();
-        let n = rng.gen_range(100..10000);
-        let epsilon: f64 = rng.gen_range(0.01..0.2);
+        let test_run_number = 10;
 
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
-
-        let mut records = Vec::with_capacity(n);
-        let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
-        for i in 0..n {
-            let x = rand::random::<u32>();
-            records.push(x);
-
-            let mut real_rank = 0;
-            for j in 0..i {
-                if records[j] <= records[i] {
-                    real_rank += 1;
+        for _ in 0..test_run_number {
+            let mut rng = rand::thread_rng();
+            let n = rng.gen_range(100..10000);
+            let epsilon: f64 = rng.gen_range(0.01..0.2);
+            let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+            let mut records = Vec::with_capacity(n);
+            let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
+            for i in 0..n {
+                let x = rand::random::<u32>();
+                records.push(x);
+                let mut real_rank = 0;
+                for j in 0..i {
+                    if records[j] <= records[i] {
+                        real_rank += 1;
+                    }
                 }
+                quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
             }
-
-            quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
-        }
-
-        for i in 0..n {
-            s.update(records[i]);
-
-            let quantile_estimated = s.query(records[i]);
-            assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
+            for i in 0..n {
+                s.update(records[i]);
+                let quantile_estimated = s.query(records[i]);
+                assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
+            }
         }
     }
 
@@ -483,8 +481,8 @@ mod tests {
 
     #[test]
     fn test_query_with_small_n_on_unbound_summary() {
-        let epsilon = 0.1;
-        let n = 31;
+        let epsilon = 0.01;
+        let n = 1000;
         let mut s = UnboundEpsilonSummary::new(epsilon);
         for i in 1..=n {
             s.update(i);
@@ -497,4 +495,36 @@ mod tests {
             assert!(error < epsilon);
         }
     }
+
+    // #[test]
+    // fn test_randomly_generated_seq_on_unbound_summary() {
+    //     let mut rng = rand::thread_rng();
+    //     let n = rng.gen_range(100..10000);
+    //     let epsilon: f64 = rng.gen_range(0.01..0.2);
+
+    //     let mut s = UnboundEpsilonSummary::new(epsilon);
+
+    //     let mut records = Vec::with_capacity(n);
+    //     let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
+    //     for i in 0..n {
+    //         let x = rand::random::<u32>();
+    //         records.push(x);
+
+    //         let mut real_rank = 0;
+    //         for j in 0..i {
+    //             if records[j] <= records[i] {
+    //                 real_rank += 1;
+    //             }
+    //         }
+
+    //         quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
+    //     }
+
+    //     for i in 0..n {
+    //         s.update(records[i]);
+
+    //         let quantile_estimated = s.query(records[i]);
+    //         assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
+    //     }
+    // }
 }
