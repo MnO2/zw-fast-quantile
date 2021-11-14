@@ -1,3 +1,33 @@
+//! Zhang Wang Fast Approximate Quantiles Algorithm in Rust
+//!
+//! ## Installation
+//!
+//! Add this to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! zw-fast-quantile = "0.1"
+//! ```
+//!
+//! ## Example
+//!
+//! ```rust
+//! use zw_fast_quantile::EpsilonSummary;
+//!
+//! let epsilon = 0.1;
+//! let l = 10;
+//! let mut s = EpsilonSummary::new(l, epsilon);
+//! for i in 1..100 {
+//!     s.update(i);
+//! }
+
+//! let ans = s.query(10);
+//! let expected: f64 = 0.1;
+//!
+//! let error: f64 = (expected - ans).abs() / expected;
+//! assert!(error < epsilon);
+//! ```
+
 use std::cmp::Ordering;
 use superslice::*;
 
@@ -173,18 +203,10 @@ fn merge<T: Clone + Ord>(s_a: &[RankInfo<T>], s_b: &[RankInfo<T>]) -> Vec<RankIn
         if from == 1 {
             if 0 < i2 && i2 < s_b.len() {
                 rmin = s_a[i1].rmin + s_b[i2 - 1].rmin;
-                rmax = if s_a[i1].rmax + s_b[i2].rmax > 0 {
-                    s_a[i1].rmax + s_b[i2].rmax - 1
-                } else {
-                    0
-                }
+                rmax = s_a[i1].rmax + s_b[i2].rmax - 1;
             } else if i2 == 0 {
                 rmin = s_a[i1].rmin;
-                rmax = if s_a[i1].rmax + s_b[i2].rmax > 0 {
-                    s_a[i1].rmax + s_b[i2].rmax - 1
-                } else {
-                    0
-                }
+                rmax = s_a[i1].rmax + s_b[i2].rmax - 1;
             } else {
                 rmin = s_a[i1].rmin + s_b[i2 - 1].rmin;
                 rmax = s_a[i1].rmax + s_b[i2 - 1].rmax;
@@ -194,18 +216,10 @@ fn merge<T: Clone + Ord>(s_a: &[RankInfo<T>], s_b: &[RankInfo<T>]) -> Vec<RankIn
         } else {
             if 0 < i1 && i1 < s_a.len() {
                 rmin = s_a[i1 - 1].rmin + s_b[i2].rmin;
-                rmax = if s_a[i1].rmax + s_b[i2].rmax > 0 {
-                    s_a[i1].rmax + s_b[i2].rmax - 1
-                } else {
-                    0
-                };
+                rmax = s_a[i1].rmax + s_b[i2].rmax - 1;
             } else if i1 == 0 {
                 rmin = s_b[i2].rmin;
-                rmax = if s_a[i1].rmax + s_b[i2].rmax > 0 {
-                    s_a[i1].rmax + s_b[i2].rmax - 1
-                } else {
-                    0
-                };
+                rmax = s_a[i1].rmax + s_b[i2].rmax - 1;
             } else {
                 rmin = s_a[i1 - 1].rmin + s_b[i2].rmin;
                 rmax = s_a[i1 - 1].rmax + s_b[i2].rmax;
@@ -329,5 +343,22 @@ mod tests {
             dbg!(quantile_ans[i]);
             assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
         }
+    }
+
+    #[test]
+    fn test_query_doc_test() {
+        let epsilon = 0.1;
+        let l = 10;
+        let mut s = EpsilonSummary::new(l, epsilon);
+        for i in 1..100 {
+            s.update(i);
+        }
+
+        let ans = s.query(10);
+        let expected: f64 = 0.1;
+
+        let error: f64 = (expected - ans).abs() / expected;
+        dbg!(error);
+        assert!(error < epsilon);
     }
 }
