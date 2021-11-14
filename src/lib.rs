@@ -298,7 +298,7 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use rand::Rng;
     #[test]
     fn test_merge_and_compress() {
         let mut s0 = Vec::new();
@@ -331,9 +331,10 @@ mod tests {
     }
 
     #[test]
-    fn test_query() {
-        let n = 100;
-        let epsilon: f64 = 0.1;
+    fn test_randomly_generated_seq() {
+        let mut rng = rand::thread_rng();
+        let n = rng.gen_range(100..10000);
+        let epsilon: f64 = rng.gen_range(0.01..0.2);
 
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
@@ -357,8 +358,6 @@ mod tests {
             s.update(records[i]);
 
             let quantile_estimated = s.query(records[i]);
-            dbg!(quantile_ans[i]);
-            dbg!(quantile_estimated);
             assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
         }
     }
