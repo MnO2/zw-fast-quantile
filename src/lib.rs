@@ -373,16 +373,11 @@ mod tests {
             s.update(i);
         }
 
-        let ans = s.query(1);
-        let expected: f64 = 0.0;
-
-        let error: f64 = (expected - ans).abs();
-        assert!(error < epsilon);
-
-        let ans = s.query(10);
-        let expected: f64 = 1.0;
-
-        let error: f64 = (expected - ans).abs();
-        assert!(error < epsilon);
+        for i in 1..=n {
+            let ans = s.query(i);
+            let expected: f64 = (i as f64) / (n as f64);
+            let error: f64 = (expected - ans).abs();
+            assert!(error < epsilon);
+        }
     }
 }
