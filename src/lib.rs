@@ -316,8 +316,16 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
     s_c
 }
 
-fn is_power_of_two(x: usize) -> bool {
-    (x & (x - 1)) == 0
+fn is_boundary(x: usize, epsilon: f64) -> Option<u32> {
+    for i in 0..31u32 {
+        let n = usize::pow(2, i);
+        let b = (((n - 1) as f64) / epsilon).floor() as usize;
+        if x == b {
+            return Some(i);
+        }
+    }
+
+    None
 }
 
 pub struct UnboundEpsilonSummary<T>
@@ -348,16 +356,13 @@ where
     }
 
     pub fn update(&mut self, e: T) {
-        let x = ((self.cnt + 1) as f64) * self.epsilon + 1.0;
         self.s_c.update(e);
 
-        if x.fract().abs() < 1e-9 && is_power_of_two(x as usize) {
+        if let Some(x) = is_boundary(self.cnt + 1, self.epsilon) {
             self.s_c.finalize(self.epsilon / 2.0);
             self.s.push(self.s_c.clone());
 
-            let x_usize = x as usize;
-            let upper_bound = (((x_usize + x_usize - 1) as f64) / self.epsilon).floor() as usize;
-
+            let upper_bound = (((usize::pow(2, x + x) - 1) as f64) / self.epsilon).floor() as usize;
             let n = upper_bound - self.cnt - 1;
             let summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
             self.s_c = summary;
@@ -367,7 +372,6 @@ where
 
     pub fn query(&mut self, e: T) -> f64 {
         let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
-
         for i in 0..self.s.len() {
             for j in 0..self.s[i].s.len() {
                 s_m = merge(&s_m, &self.s[i].s[j])
@@ -496,35 +500,34 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_randomly_generated_seq_on_unbound_summary() {
-    //     let mut rng = rand::thread_rng();
-    //     let n = rng.gen_range(100..10000);
-    //     let epsilon: f64 = rng.gen_range(0.01..0.2);
+    #[test]
+    fn test_randomly_generated_seq_on_unbound_summary() {
+        let mut rng = rand::thread_rng();
+        let n = rng.gen_range(100..10000);
+        let epsilon: f64 = rng.gen_range(0.01..0.2);
+        let mut s = UnboundEpsilonSummary::new(epsilon);
 
-    //     let mut s = UnboundEpsilonSummary::new(epsilon);
+        let mut records = Vec::with_capacity(n);
+        let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
+        for i in 0..n {
+            let x = rand::random::<u32>();
+            records.push(x);
 
-    //     let mut records = Vec::with_capacity(n);
-    //     let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
-    //     for i in 0..n {
-    //         let x = rand::random::<u32>();
-    //         records.push(x);
+            let mut real_rank = 0;
+            for j in 0..i {
+                if records[j] <= records[i] {
+                    real_rank += 1;
+                }
+            }
 
-    //         let mut real_rank = 0;
-    //         for j in 0..i {
-    //             if records[j] <= records[i] {
-    //                 real_rank += 1;
-    //             }
-    //         }
+            quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
+        }
 
-    //         quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
-    //     }
+        for i in 0..n {
+            s.update(records[i]);
 
-    //     for i in 0..n {
-    //         s.update(records[i]);
-
-    //         let quantile_estimated = s.query(records[i]);
-    //         assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
-    //     }
-    // }
+            let quantile_estimated = s.query(records[i]);
+            assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
+        }
+    }
 }
