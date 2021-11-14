@@ -85,14 +85,16 @@ impl<T> EpsilonSummary<T>
 where
     T: Clone + Ord + std::fmt::Debug,
 {
-    pub fn new(level: usize, epsilon: f64) -> Self {
-        let b = ((level as f64) / epsilon + epsilon.ln() / (epsilon * 2.0_f64.ln())).floor() as usize;
-        let s = vec![vec![]; level];
+    pub fn new(number_of_levels: usize, epsilon: f64) -> Self {
+        // N = 2^L
+        // block_size = floor(log2(epsilon * N) / epsilon)
+        let block_size = ((number_of_levels as f64) / epsilon + epsilon.log2() / epsilon).floor() as usize;
+        let s = vec![vec![]; number_of_levels];
 
         EpsilonSummary {
             epsilon,
-            b,
-            level,
+            b: block_size,
+            level: number_of_levels,
             cnt: 0,
             s,
         }
@@ -118,8 +120,7 @@ where
         let mut s_c = compress(&self.s[0], compressed_size, self.epsilon);
 
         self.s[0].clear();
-        let l = self.level;
-        for k in 1..l {
+        for k in 1..self.level {
             if self.s[k].is_empty() {
                 self.s[k] = s_c.clone();
             } else {
@@ -338,9 +339,6 @@ mod tests {
             s.update(records[i]);
 
             let quantile_estimated = s.query(records[i]);
-            dbg!(records[i]);
-            dbg!(quantile_estimated);
-            dbg!(quantile_ans[i]);
             assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
         }
     }
@@ -348,7 +346,8 @@ mod tests {
     #[test]
     fn test_query_doc_test() {
         let epsilon = 0.1;
-        let l = 10;
+        let n = 100;
+        let l = ((n as f64).log2().floor() as usize) + 2;
         let mut s = EpsilonSummary::new(l, epsilon);
         for i in 1..100 {
             s.update(i);
