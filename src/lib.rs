@@ -16,7 +16,7 @@
 //!
 //! let epsilon = 0.2;
 //! let n = 10;
-//! let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+//! let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
 //! for i in 1..=n {
 //!     s.update(i);
 //! }
@@ -29,12 +29,6 @@
 //! ```
 //!
 use std::cmp::Ordering;
-use std::result::Result;
-
-#[derive(Debug, Clone)]
-pub enum FixedSizeEpsilonSummaryError {
-    EpsilonTooSmall,
-}
 
 #[derive(Debug, Clone)]
 struct RankInfo<T>
@@ -85,22 +79,24 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
+    fallback_mode: bool,
+    elems: Vec<T>,
 }
 
 impl<T> FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
-    pub fn new(n: usize, epsilon: f64) -> Result<Self, FixedSizeEpsilonSummaryError> {
+    pub fn new(n: usize, epsilon: f64) -> Self {
         // number_of_leves = ceil(log2(n))
         // block_size = floor(log2(epsilon * N) / epsilon)
 
         let epsilon_n: f64 = (n as f64) * epsilon;
-        if epsilon_n <= 1.0 {
-            return Err(FixedSizeEpsilonSummaryError::EpsilonTooSmall);
-        }
-
-        let number_of_levels = (epsilon_n as f64).log2().ceil() as usize;
+        let number_of_levels = if epsilon_n > 1.0 {
+            (epsilon_n as f64).log2().ceil() as usize
+        } else {
+            1
+        };
         let block_size = if number_of_levels > 1 {
             (epsilon_n.log2() / epsilon).floor() as usize
         } else {
@@ -109,13 +105,15 @@ where
 
         let s = vec![vec![]; number_of_levels];
 
-        Ok(FixedSizeEpsilonSummary {
+        FixedSizeEpsilonSummary {
             epsilon,
             b: block_size,
             level: number_of_levels,
             cnt: 0,
             s,
-        })
+            fallback_mode: false,
+            elems: Vec::new(),
+        }
     }
 
     pub fn update(&mut self, e: T) {
@@ -322,11 +320,6 @@ fn is_power_of_two(x: usize) -> bool {
     (x & (x - 1)) == 0
 }
 
-#[derive(Debug, Clone)]
-pub enum UnboundEpsilonSummaryError {
-    EpsilonTooSmall,
-}
-
 pub struct UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
@@ -339,35 +332,37 @@ where
 
 impl<T> UnboundEpsilonSummary<T>
 where
-    T: Clone + Ord,
+    T: Clone + Ord + std::fmt::Debug,
 {
-    pub fn new(epsilon: f64) -> Result<Self, UnboundEpsilonSummaryError> {
+    pub fn new(epsilon: f64) -> Self {
         let s = vec![];
 
         let n = (1.0_f64 / epsilon).floor() as usize;
-        let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0).unwrap();
-        Ok(UnboundEpsilonSummary {
+        let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0);
+        UnboundEpsilonSummary {
             epsilon,
             cnt: 0,
             s,
             s_c,
-        })
+        }
     }
 
     pub fn update(&mut self, e: T) {
-        let x = (((self.cnt + 1) as f64) * self.epsilon + 1.0).ceil() as usize;
+        let x = ((self.cnt + 1) as f64) * self.epsilon + 1.0;
+        self.s_c.update(e);
 
-        if is_power_of_two(x) {
+        if x.fract().abs() < 1e-9 && is_power_of_two(x as usize) {
             self.s_c.finalize(self.epsilon / 2.0);
             self.s.push(self.s_c.clone());
 
-            let upper_bound = (((x + x - 1) as f64) / self.epsilon).floor() as usize;
+            let x_usize = x as usize;
+            let upper_bound = (((x_usize + x_usize - 1) as f64) / self.epsilon).floor() as usize;
+
             let n = upper_bound - self.cnt - 1;
-            let summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0).unwrap();
+            let summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
             self.s_c = summary;
-        } else {
-            self.s_c.update(e);
         }
+        self.cnt += 1;
     }
 
     pub fn query(&mut self, e: T) -> f64 {
@@ -443,7 +438,7 @@ mod tests {
         let n = rng.gen_range(100..10000);
         let epsilon: f64 = rng.gen_range(0.01..0.2);
 
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
 
         let mut records = Vec::with_capacity(n);
         let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
@@ -473,31 +468,31 @@ mod tests {
     fn test_query_with_small_n_on_fixedsize_summary() {
         let epsilon = 0.2;
         let n = 10;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
         for i in 1..=n {
             s.update(i);
         }
 
         for i in 1..=n {
             let ans = s.query(i);
-            let expected: f64 = (i as f64) / (n as f64);
+            let expected: f64 = ((i - 1) as f64) / (n as f64);
             let error: f64 = (expected - ans).abs();
             assert!(error < epsilon);
         }
     }
 
     #[test]
-    fn test_query_on_unbound_summary() {
-        let epsilon = 0.2;
-        let n = 100;
-        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
+    fn test_query_with_small_n_on_unbound_summary() {
+        let epsilon = 0.1;
+        let n = 31;
+        let mut s = UnboundEpsilonSummary::new(epsilon);
         for i in 1..=n {
             s.update(i);
         }
 
         for i in 1..=n {
             let ans = s.query(i);
-            let expected: f64 = (i as f64) / (n as f64);
+            let expected: f64 = ((i - 1) as f64) / (n as f64);
             let error: f64 = (expected - ans).abs();
             assert!(error < epsilon);
         }
