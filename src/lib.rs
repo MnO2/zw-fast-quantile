@@ -118,8 +118,7 @@ where
         self.s[0].push(rank_info);
 
         self.cnt += 1;
-        let n = self.s[0].len();
-        if n < self.b {
+        if self.s[0].len() < self.b {
             return;
         }
 
