@@ -312,13 +312,28 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
     s_c
 }
 
+fn boundary_val(i: u32, epsilon: f64) -> usize {
+    let n = usize::pow(2, i);
+    (((n - 1) as f64) / epsilon).floor() as usize
+}
+
+#[allow(clippy::many_single_char_names)]
+#[allow(clippy::comparison_chain)]
 fn is_boundary(x: usize, epsilon: f64) -> Option<u32> {
-    for i in 0..31u32 {
-        let n = usize::pow(2, i);
-        let b = (((n - 1) as f64) / epsilon).floor() as usize;
-        if x == b {
-            return Some(i);
+    let mut l = 0u32;
+    let mut r = 31u32;
+
+    while l < r {
+        let m = l + (r - l) / 2;
+        if boundary_val(m, epsilon) < x {
+            l = m + 1;
+        } else {
+            r = m;
         }
+    }
+
+    if l <= 31u32 && boundary_val(l, epsilon) == x {
+        return Some(l);
     }
 
     None
