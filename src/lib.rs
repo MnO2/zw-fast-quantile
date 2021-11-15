@@ -79,8 +79,6 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
-    fallback_mode: bool,
-    elems: Vec<T>,
 }
 
 impl<T> FixedSizeEpsilonSummary<T>
@@ -111,8 +109,6 @@ where
             level: number_of_levels,
             cnt: 0,
             s,
-            fallback_mode: false,
-            elems: Vec::new(),
         }
     }
 
@@ -138,10 +134,10 @@ where
         self.s[0].clear();
         for k in 1..self.level {
             if self.s[k].is_empty() {
-                self.s[k] = s_c.clone();
+                self.s[k] = s_c;
                 break;
             } else {
-                let t = merge(&self.s[k], &s_c);
+                let t = merge(s_c, &self.s[k]);
                 s_c = compress(&t, compressed_size, self.epsilon);
                 self.s[k].clear();
             }
@@ -157,7 +153,7 @@ where
 
         let mut s_m = self.s[0].clone();
         for i in 1..self.level {
-            s_m = merge(&s_m, &self.s[i])
+            s_m = merge(s_m, &self.s[i])
         }
 
         let mut i = 0;
@@ -186,7 +182,7 @@ where
 
         let mut s_m = self.s[0].clone();
         for i in 1..self.level {
-            s_m = merge(&s_m, &self.s[i])
+            s_m = merge(s_m, &self.s[i])
         }
 
         compress(&s_m, self.b, epsilon)
@@ -204,16 +200,16 @@ where
     }
 }
 
-fn merge<T: Clone + Ord>(s_a: &[RankInfo<T>], s_b: &[RankInfo<T>]) -> Vec<RankInfo<T>> {
+fn merge<T: Clone + Ord>(s_a: Vec<RankInfo<T>>, s_b: &[RankInfo<T>]) -> Vec<RankInfo<T>> {
     if s_a.is_empty() {
         return s_b.to_vec();
     }
 
     if s_b.is_empty() {
-        return s_a.to_vec();
+        return s_a;
     }
 
-    let mut s_m = Vec::new();
+    let mut s_m = Vec::with_capacity(s_a.len() + s_b.len());
 
     let mut i1 = 0;
     let mut i2 = 0;
@@ -276,7 +272,7 @@ fn merge<T: Clone + Ord>(s_a: &[RankInfo<T>], s_b: &[RankInfo<T>]) -> Vec<RankIn
 }
 
 fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Vec<RankInfo<T>> {
-    let mut s_c = Vec::new();
+    let mut s_c = Vec::with_capacity(s0.len());
 
     let mut s0_range = 0;
     let mut e: f64 = 0.0;
@@ -374,7 +370,7 @@ where
         let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
         for i in 0..self.s.len() {
             for j in 0..self.s[i].s.len() {
-                s_m = merge(&s_m, &self.s[i].s[j])
+                s_m = merge(s_m, &self.s[i].s[j])
             }
         }
 
@@ -407,8 +403,8 @@ mod tests {
     use rand::Rng;
     #[test]
     fn test_merge_and_compress() {
-        let mut s0 = Vec::new();
-        let mut s1 = Vec::new();
+        let mut s0 = Vec::with_capacity(4);
+        let mut s1 = Vec::with_capacity(4);
 
         s0.push(RankInfo::new(2, 1, 1));
         s0.push(RankInfo::new(4, 3, 4));
@@ -420,7 +416,7 @@ mod tests {
         s1.push(RankInfo::new(12, 5, 6));
         s1.push(RankInfo::new(15, 8, 8));
 
-        let merged = merge(&s0, &s1);
+        let merged = merge(s0, &s1);
 
         assert_eq!(merged.len(), 8);
         let merged_vals: Vec<i32> = merged.iter().map(|x| x.val).collect();
