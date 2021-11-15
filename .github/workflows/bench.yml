@@ -15,31 +15,4 @@ jobs:
           override: true
       - name: Run benchmark
         run: |
-          cargo bench --all-features --bench zw_benchmark -- --output-format bencher | tee output.txt
-
-      # Download previous benchmark result from cache (if exists)
-      - name: Download previous benchmark data
-        uses: actions/cache@v1
-        with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
-
-      # Run `github-action-benchmark` action
-      - name: Store benchmark result
-        uses: rhysd/github-action-benchmark@v1
-        with:
-          name: zw_benchmark
-          # What benchmark tool the output.txt came from
-          tool: 'cargo'
-          # Where the output from the benchmark tool is stored
-          output-file-path: output.txt
-          # # Where the previous data file is stored
-          # external-data-json-path: ./cache/benchmark-data.json
-          # Workflow will fail when an alert happens
-          fail-on-alert: true
-          # GitHub API token to make a commit comment
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Enable alert commit comment
-          comment-on-alert: true
-          alert-comment-cc-users: '@messense'
-          auto-push: true
+          cargo criterion --bench zw_benchmark
