@@ -101,7 +101,8 @@ where
             n + 1
         };
 
-        let s = vec![vec![]; number_of_levels];
+        let mut s = vec![vec![]; number_of_levels];
+        s[0].reserve_exact(block_size);
 
         FixedSizeEpsilonSummary {
             epsilon,
