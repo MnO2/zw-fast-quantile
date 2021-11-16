@@ -156,15 +156,7 @@ where
             s_m = merge(s_m, &self.s[i])
         }
 
-        let mut i = 0;
-        while i < s_m.len() {
-            if s_m[i].val >= e {
-                break;
-            }
-
-            i += 1;
-        }
-
+        let i = find_idx(&s_m, e).unwrap();
         let quantile: f64 = ((s_m[i].rmin + s_m[i].rmax) as f64) / (2.0_f64 * self.cnt as f64);
         if quantile < 0.0_f64 {
             0.0_f64
@@ -341,6 +333,23 @@ fn is_boundary(x: usize, epsilon: f64) -> Option<u32> {
     None
 }
 
+fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], e: T) -> Option<usize> {
+    let mut l = 0usize;
+    let mut r = s_m.len() - 1;
+    while l < r {
+        let m = l + (r - l) / 2;
+        if s_m[m].val < e {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+    if l < s_m.len() && s_m[l].val >= e {
+        return Some(l);
+    }
+    None
+}
+
 pub struct UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
@@ -391,14 +400,7 @@ where
             }
         }
 
-        let mut i = 0;
-        while i < s_m.len() {
-            if s_m[i].val >= e {
-                break;
-            }
-
-            i += 1;
-        }
+        let i = find_idx(&s_m, e).unwrap();
 
         let quantile: f64 = ((s_m[i].rmin + s_m[i].rmax) as f64) / (2.0_f64 * self.cnt as f64);
         if quantile < 0.0_f64 {
