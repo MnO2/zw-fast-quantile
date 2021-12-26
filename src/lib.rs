@@ -14,18 +14,16 @@
 //! ```rust
 //! use zw_fast_quantile::FixedSizeEpsilonSummary;
 //!
-//! let epsilon = 0.2;
+//! let epsilon = 0.1;
 //! let n = 10;
 //! let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
 //! for i in 1..=n {
 //!     s.update(i);
 //! }
 //!
-//! let ans = s.query(1);
-//! let expected: f64 = 0.0;
-//!
-//! let error: f64 = (expected - ans).abs();
-//! assert!(error < epsilon);
+//! let ans = s.query(0.0);
+//! let expected = 1;
+//! assert!(expected == ans);
 //! ```
 //!
 use std::cmp::Ordering;
@@ -144,7 +142,7 @@ where
         }
     }
 
-    pub fn query(&mut self, e: T) -> f64 {
+    pub fn query(&mut self, r: f64) -> T {
         self.s[0].sort();
         for (i, r) in self.s[0].iter_mut().enumerate() {
             r.rmin = i as i64;
@@ -156,13 +154,10 @@ where
             s_m = merge(s_m, &self.s[i])
         }
 
-        let i = find_idx(&s_m, e).unwrap();
-        let quantile: f64 = ((s_m[i].rmin + s_m[i].rmax) as f64) / (2.0_f64 * self.cnt as f64);
-        if quantile < 0.0_f64 {
-            0.0_f64
-        } else {
-            quantile
-        }
+        let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
+        let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
+        let e = find_idx(&s_m, rank, epsilon_n).unwrap();
+        return e;
     }
 
     fn calc_s_m(&mut self, epsilon: f64) -> Vec<RankInfo<T>> {
@@ -333,20 +328,26 @@ fn is_boundary(x: usize, epsilon: f64) -> Option<u32> {
     None
 }
 
-fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], e: T) -> Option<usize> {
+fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], rank: i64, epsilon_n: i64) -> Option<T> {
     let mut l = 0usize;
     let mut r = s_m.len() - 1;
     while l < r {
         let m = l + (r - l) / 2;
-        if s_m[m].val < e {
+        if s_m[m].rmin < rank {
             l = m + 1;
         } else {
             r = m;
         }
     }
-    if l < s_m.len() && s_m[l].val >= e {
-        return Some(l);
+
+    while l < s_m.len() && s_m[l].rmin >= rank - epsilon_n {
+        if s_m[l].rmax <= rank + epsilon_n {
+            return Some(s_m[l].val.clone());
+        }
+
+        l += 1;
     }
+
     None
 }
 
@@ -392,7 +393,7 @@ where
         self.cnt += 1;
     }
 
-    pub fn query(&mut self, e: T) -> f64 {
+    pub fn query(&mut self, r: f64) -> T {
         let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
         for i in 0..self.s.len() {
             for j in 0..self.s[i].s.len() {
@@ -400,14 +401,10 @@ where
             }
         }
 
-        let i = find_idx(&s_m, e).unwrap();
-
-        let quantile: f64 = ((s_m[i].rmin + s_m[i].rmax) as f64) / (2.0_f64 * self.cnt as f64);
-        if quantile < 0.0_f64 {
-            0.0_f64
-        } else {
-            quantile
-        }
+        let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
+        let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
+        let e = find_idx(&s_m, rank, epsilon_n).unwrap();
+        return e;
     }
 
     #[inline]
@@ -419,7 +416,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
+    use rand_distr::Distribution;
+
+    // INSTRUMENTED_SYSTEM is an instrumented instance of the system allocator
+    #[global_allocator]
+    static GLOBAL: &stats_alloc::StatsAlloc<std::alloc::System> = &stats_alloc::INSTRUMENTED_SYSTEM;
+
     #[test]
     fn test_merge_and_compress() {
         let mut s0 = Vec::with_capacity(4);
@@ -452,38 +454,8 @@ mod tests {
     }
 
     #[test]
-    fn test_randomly_generated_seq_on_fixedsize_summary() {
-        let test_run_number = 10;
-
-        for _ in 0..test_run_number {
-            let mut rng = rand::thread_rng();
-            let n = rng.gen_range(100..10000);
-            let epsilon: f64 = rng.gen_range(0.01..0.2);
-            let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
-            let mut records = Vec::with_capacity(n);
-            let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
-            for i in 0..n {
-                let x = rand::random::<u32>();
-                records.push(x);
-                let mut real_rank = 0;
-                for j in 0..i {
-                    if records[j] <= records[i] {
-                        real_rank += 1;
-                    }
-                }
-                quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
-            }
-            for i in 0..n {
-                s.update(records[i]);
-                let quantile_estimated = s.query(records[i]);
-                assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
-            }
-        }
-    }
-
-    #[test]
     fn test_query_with_small_n_on_fixedsize_summary() {
-        let epsilon = 0.2;
+        let epsilon = 0.1;
         let n = 10;
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
         for i in 1..=n {
@@ -491,58 +463,101 @@ mod tests {
         }
 
         for i in 1..=n {
-            let ans = s.query(i);
-            let expected: f64 = ((i - 1) as f64) / (n as f64);
-            let error: f64 = (expected - ans).abs();
-            assert!(error < epsilon);
+            let rank: f64 = ((i - 1) as f64) / (n as f64);
+            let ans = s.query(rank);
+            assert!(i == ans);
         }
     }
 
     #[test]
     fn test_query_with_small_n_on_unbound_summary() {
-        let epsilon = 0.01;
-        let n = 1000;
+        let epsilon = 0.1;
+        let n = 10;
         let mut s = UnboundEpsilonSummary::new(epsilon);
         for i in 1..=n {
             s.update(i);
         }
 
         for i in 1..=n {
-            let ans = s.query(i);
-            let expected: f64 = ((i - 1) as f64) / (n as f64);
-            let error: f64 = (expected - ans).abs();
-            assert!(error < epsilon);
+            let rank: f64 = ((i - 1) as f64) / (n as f64);
+            let ans = s.query(rank);
+            assert!(i == ans);
         }
     }
 
     #[test]
-    fn test_randomly_generated_seq_on_unbound_summary() {
-        let mut rng = rand::thread_rng();
-        let n = rng.gen_range(100..10000);
-        let epsilon: f64 = rng.gen_range(0.01..0.2);
+    fn test_normal_distribution_generated_seq_on_unbound_summary() {
+        let n = 1000000;
+        let epsilon: f64 = 0.00001;
         let mut s = UnboundEpsilonSummary::new(epsilon);
 
+        let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
+        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+
+        let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
-        let mut quantile_ans: Vec<f64> = Vec::with_capacity(n);
-        for i in 0..n {
-            let x = rand::random::<u32>();
-            records.push(x);
-
-            let mut real_rank = 0;
-            for j in 0..i {
-                if records[j] <= records[i] {
-                    real_rank += 1;
-                }
-            }
-
-            quantile_ans.push((real_rank as f64) / ((i + 1) as f64))
+        for _ in 0..n {
+            let x = dn.sample(&mut normal_rng);
+            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
         }
+        let mem = startmem.change();
+        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
 
+        println!("{}k", bytes_change / 1024);
+
+        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let startmem = stats_alloc::Region::new(&GLOBAL);
         for i in 0..n {
             s.update(records[i]);
-
-            let quantile_estimated = s.query(records[i]);
-            assert!((quantile_ans[i] - quantile_estimated).abs() < epsilon);
         }
+        let mem = startmem.change();
+        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
+
+        println!("{}k", bytes_change / 1024);
+
+        let quantile_estimated = s.query(0.5);
+        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
+
+        let quantile_estimated = s.query(0.0);
+        assert!((quantile_estimated - records[0]).abs() < 0.01);
+
+        let quantile_estimated = s.query(0.99);
+        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
+
+        let quantile_estimated = s.query(1.0);
+        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_pareto_distribution_generated_seq_on_unbound_summary() {
+        let n = 1000000;
+        let epsilon: f64 = 0.00001;
+        let mut s = UnboundEpsilonSummary::new(epsilon);
+
+        let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
+        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+
+        let mut records = Vec::with_capacity(n);
+        for i in 0..n {
+            let x = dn.sample(&mut normal_rng);
+
+            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
+            s.update(records[i]);
+        }
+
+        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let quantile_estimated = s.query(0.5);
+        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
+
+        let quantile_estimated = s.query(0.0);
+        assert!((quantile_estimated - records[0]).abs() < 0.01);
+
+        let quantile_estimated = s.query(0.99);
+        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
+
+        let quantile_estimated = s.query(1.0);
+        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
     }
 }
