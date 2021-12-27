@@ -380,6 +380,7 @@ where
     s: Vec<FixedSizeEpsilonSummary<T>>,
     s_c: FixedSizeEpsilonSummary<T>,
     boundaries: [usize; 32],
+    cached_s_m: Option<Vec<RankInfo<T>>>,
 }
 
 impl<T> UnboundEpsilonSummary<T>
@@ -403,10 +404,12 @@ where
             s,
             s_c,
             boundaries,
+            cached_s_m: None,
         }
     }
 
     pub fn update(&mut self, e: T) {
+        self.cached_s_m = None;
         self.s_c.update(e);
 
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
@@ -423,16 +426,20 @@ where
     }
 
     pub fn query(&mut self, r: f64) -> T {
-        let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
-        for i in 0..self.s.len() {
-            for j in 0..self.s[i].s.len() {
-                s_m = merge(s_m, &self.s[i].s[j])
+        if self.cached_s_m.is_none() {
+            let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
+            for i in 0..self.s.len() {
+                for j in 0..self.s[i].s.len() {
+                    s_m = merge(s_m, &self.s[i].s[j])
+                }
             }
+
+            self.cached_s_m = Some(s_m);
         }
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        let e = find_idx(&s_m, rank, epsilon_n).unwrap();
+        let e = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n).unwrap();
         return e;
     }
 
