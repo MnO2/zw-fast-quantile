@@ -92,7 +92,7 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
-    cached_s_m: Option<Vec<RankInfo<T>>>
+    cached_s_m: Option<Vec<RankInfo<T>>>,
 }
 
 impl<T> FixedSizeEpsilonSummary<T>
@@ -167,7 +167,7 @@ where
                 r.rmin = i as i64;
                 r.rmax = i as i64;
             }
-    
+
             let mut s_m = self.s[0].clone();
             for i in 1..self.level {
                 s_m = merge(s_m, &self.s[i])
@@ -353,6 +353,8 @@ fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], rank: i64, epsilon_n: i64) -> O
         let m = l + (r - l) / 2;
         if s_m[m].rmin < rank {
             l = m + 1;
+        } else if s_m[m].rmax > rank {
+            r = m;
         } else {
             r = m;
         }
