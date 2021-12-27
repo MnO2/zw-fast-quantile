@@ -55,12 +55,23 @@ fn bench_unbound_zw_quantile_query(s: &mut UnboundEpsilonSummary<usize>) {
     }
 }
 
+fn bench_fixed_zw_quantile_query(s: &mut FixedSizeEpsilonSummary<usize>) {
+    for rank in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
+        s.query(rank);
+    }
+}
+
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("zw fixed quantile update", |b| b.iter(bench_fixed_zw_quantile_update));
     c.bench_function("zw unbound quantile update", |b| {
         b.iter(bench_unbound_zw_quantile_update)
     });
     c.bench_function("gk quantile update", |b| b.iter(bench_gk_quantile_update));
+
+    let mut fixed_s = bench_fixed_zw_quantile_update();
+    c.bench_function("zw fixed quantile query", |b| {
+        b.iter(|| bench_fixed_zw_quantile_query(&mut fixed_s))
+    });
 
     let mut s = bench_unbound_zw_quantile_update();
     c.bench_function("zw unbound quantile query", |b| {
