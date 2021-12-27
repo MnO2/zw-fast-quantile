@@ -317,28 +317,22 @@ fn compress<T: Clone>(mut s0: Vec<RankInfo<T>>, block_size: usize, epsilon: f64)
 }
 
 #[inline]
-fn boundary_val(i: u32, epsilon: f64) -> usize {
-    let n = usize::pow(2, i);
-    (((n - 1) as f64) / epsilon).floor() as usize
-}
-
-#[inline]
 #[allow(clippy::many_single_char_names)]
 #[allow(clippy::comparison_chain)]
-fn is_boundary(x: usize, epsilon: f64) -> Option<u32> {
-    let mut l = 0u32;
-    let mut r = 31u32;
+fn is_boundary(x: usize, boundaries: &[usize; 32]) -> Option<usize> {
+    let mut l = 0;
+    let mut r = 31;
 
     while l < r {
         let m = l + (r - l) / 2;
-        if boundary_val(m, epsilon) < x {
+        if boundaries[m] < x {
             l = m + 1;
         } else {
             r = m;
         }
     }
 
-    if l <= 31u32 && boundary_val(l, epsilon) == x {
+    if l < 31 && boundaries[l] == x {
         return Some(l);
     }
 
@@ -376,6 +370,7 @@ where
     cnt: usize,
     s: Vec<FixedSizeEpsilonSummary<T>>,
     s_c: FixedSizeEpsilonSummary<T>,
+    boundaries: [usize; 32],
 }
 
 impl<T> UnboundEpsilonSummary<T>
@@ -387,21 +382,28 @@ where
 
         let n = (1.0_f64 / epsilon).floor() as usize;
         let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0);
+        let mut boundaries: [usize; 32] = [0; 32];
+        for i in 0..32usize {
+            let boundary = (((usize::pow(2, i as u32) - 1) as f64) / epsilon).floor() as usize;
+            boundaries[i] = boundary
+        }
+
         UnboundEpsilonSummary {
             epsilon,
             cnt: 0,
             s,
             s_c,
+            boundaries,
         }
     }
 
     pub fn update(&mut self, e: T) {
         self.s_c.update(e);
 
-        if let Some(x) = is_boundary(self.cnt + 1, self.epsilon) {
+        if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
             self.s_c.finalize(self.epsilon / 2.0);
 
-            let upper_bound = (((usize::pow(2, x + x) - 1) as f64) / self.epsilon).floor() as usize;
+            let upper_bound = (((usize::pow(2, (x + x) as u32) - 1) as f64) / self.epsilon).floor() as usize;
             let n = upper_bound - self.cnt - 1;
             let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
             std::mem::swap(&mut self.s_c, &mut summary);
