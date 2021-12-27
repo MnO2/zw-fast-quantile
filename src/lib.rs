@@ -415,7 +415,7 @@ where
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
             self.s_c.finalize(self.epsilon / 2.0);
 
-            let upper_bound = self.boundaries[x+x];
+            let upper_bound = self.boundaries[x + x];
             let n = upper_bound - self.cnt - 1;
             let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
             std::mem::swap(&mut self.s_c, &mut summary);
