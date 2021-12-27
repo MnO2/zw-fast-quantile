@@ -5,7 +5,7 @@ extern crate zw_fast_quantile;
 
 use criterion::Criterion;
 use quantiles::greenwald_khanna;
-use zw_fast_quantile::{UnboundEpsilonSummary, FixedSizeEpsilonSummary};
+use zw_fast_quantile::{FixedSizeEpsilonSummary, UnboundEpsilonSummary};
 
 fn bench_gk_quantile_update() -> greenwald_khanna::Stream<usize> {
     let n = 5000;
@@ -57,11 +57,15 @@ fn bench_unbound_zw_quantile_query(s: &mut UnboundEpsilonSummary<usize>) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("zw fixed quantile update", |b| b.iter(bench_fixed_zw_quantile_update));
-    c.bench_function("zw unbound quantile update", |b| b.iter(bench_unbound_zw_quantile_update));
+    c.bench_function("zw unbound quantile update", |b| {
+        b.iter(bench_unbound_zw_quantile_update)
+    });
     c.bench_function("gk quantile update", |b| b.iter(bench_gk_quantile_update));
 
     let mut s = bench_unbound_zw_quantile_update();
-    c.bench_function("zw unbound quantile query", |b| b.iter(|| bench_unbound_zw_quantile_query(&mut s)));
+    c.bench_function("zw unbound quantile query", |b| {
+        b.iter(|| bench_unbound_zw_quantile_query(&mut s))
+    });
 
     let mut stream = bench_gk_quantile_update();
     c.bench_function("gk quantile query", |b| b.iter(|| bench_gk_quantile_query(&mut stream)));
