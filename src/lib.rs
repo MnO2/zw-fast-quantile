@@ -26,6 +26,21 @@
 //! assert!(expected == ans);
 //! ```
 //!
+//! //! ```rust
+//! use zw_fast_quantile::UnboundEpsilonSummary;
+//!
+//! let epsilon = 0.1;
+//! let n = 10;
+//! let mut s = UnboundEpsilonSummary::new(epsilon);
+//! for i in 1..=n {
+//!     s.update(i);
+//! }
+//!
+//! let ans = s.query(0.0);
+//! let expected = 1;
+//! assert!(expected == ans);
+//! ```
+//! 
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
