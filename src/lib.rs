@@ -92,6 +92,7 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
+    cached_s_m: Option<Vec<RankInfo<T>>>
 }
 
 impl<T> FixedSizeEpsilonSummary<T>
@@ -123,10 +124,12 @@ where
             level: number_of_levels,
             cnt: 0,
             s,
+            cached_s_m: None,
         }
     }
 
     pub fn update(&mut self, e: T) {
+        self.cached_s_m = None;
         let rank_info = RankInfo::new(e, 0, 0);
         self.s[0].push(rank_info);
 
@@ -158,20 +161,24 @@ where
     }
 
     pub fn query(&mut self, r: f64) -> T {
-        self.s[0].sort();
-        for (i, r) in self.s[0].iter_mut().enumerate() {
-            r.rmin = i as i64;
-            r.rmax = i as i64;
-        }
+        if self.cached_s_m.is_none() {
+            self.s[0].sort();
+            for (i, r) in self.s[0].iter_mut().enumerate() {
+                r.rmin = i as i64;
+                r.rmax = i as i64;
+            }
+    
+            let mut s_m = self.s[0].clone();
+            for i in 1..self.level {
+                s_m = merge(s_m, &self.s[i])
+            }
 
-        let mut s_m = self.s[0].clone();
-        for i in 1..self.level {
-            s_m = merge(s_m, &self.s[i])
+            self.cached_s_m = Some(s_m);
         }
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        let e = find_idx(&s_m, rank, epsilon_n).unwrap();
+        let e = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n).unwrap();
         return e;
     }
 
