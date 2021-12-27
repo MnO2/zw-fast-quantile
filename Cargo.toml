@@ -1,6 +1,6 @@
 [package]
 name = "zw-fast-quantile"
-version = "0.2.0"
+version = "0.2.1"
 repository = "https://github.com/MnO2/zw-fast-quantile"
 license = "Apache-2.0"
 description = "Zhang-Wang fast quantile algorithm in Rust"
