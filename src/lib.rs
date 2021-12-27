@@ -488,7 +488,7 @@ mod tests {
     #[test]
     fn test_normal_distribution_generated_seq_on_unbound_summary() {
         let n = 1000000;
-        let epsilon: f64 = 0.00001;
+        let epsilon: f64 = 0.01;
         let mut s = UnboundEpsilonSummary::new(epsilon);
 
         let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
@@ -532,21 +532,33 @@ mod tests {
     #[test]
     fn test_pareto_distribution_generated_seq_on_unbound_summary() {
         let n = 1000000;
-        let epsilon: f64 = 0.00001;
+        let epsilon: f64 = 0.001;
         let mut s = UnboundEpsilonSummary::new(epsilon);
 
         let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
         let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
 
+        let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
-        for i in 0..n {
+        for _ in 0..n {
             let x = dn.sample(&mut normal_rng);
-
             records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
-            s.update(records[i]);
         }
+        let mem = startmem.change();
+        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
+
+        println!("{}k", bytes_change / 1024);
 
         records.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let startmem = stats_alloc::Region::new(&GLOBAL);
+        for i in 0..n {
+            s.update(records[i]);
+        }
+        let mem = startmem.change();
+        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
+
+        println!("{}k", bytes_change / 1024);
 
         let quantile_estimated = s.query(0.5);
         assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
