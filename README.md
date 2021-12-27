@@ -3,7 +3,7 @@
 [![CI](https://github.com/MnO2/zw-fast-quantile/actions/workflows/CI.yml/badge.svg)](https://github.com/MnO2/zw-fast-quantile/actions/workflows/CI.yml)
 [![Crates.io](https://img.shields.io/crates/v/zw-fast-quantile.svg)](https://crates.io/crates/zw-fast-quantile)
 
-Zhang Wang Fast Approximate Quantiles Algorithm in Rust. [Paper](http://web.cs.ucla.edu/~weiwang/paper/SSDBM07_2.pdf)
+Zhang Wang Fast Approximate Quantiles Algorithm in Rust. [Paper](http://web.cs.ucla.edu/~weiwang/paper/SSDBM07_2.pdf). It's the original algorithm inspired the techniques in [Tensorflow Boosted Trees](https://android.googlesource.com/platform/external/tensorflow/+/6341b8975b7660244e1ca3003bfce5371f1fd167/tensorflow/core/kernels/boosted_trees/quantiles/weighted_quantiles_stream.h#30)
 
 ## Installation
 
