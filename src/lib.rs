@@ -142,7 +142,7 @@ where
         }
 
         let compressed_size = self.b / 2;
-        let mut s_c = compress(&self.s[0], compressed_size, self.epsilon);
+        let mut s_c = compress(self.s[0].clone(), compressed_size, self.epsilon);
 
         self.s[0].clear();
         for k in 1..self.level {
@@ -151,7 +151,7 @@ where
                 break;
             } else {
                 let t = merge(s_c, &self.s[k]);
-                s_c = compress(&t, compressed_size, self.epsilon);
+                s_c = compress(t, compressed_size, self.epsilon);
                 self.s[k].clear();
             }
         }
@@ -187,7 +187,7 @@ where
             s_m = merge(s_m, &self.s[i])
         }
 
-        compress(&s_m, self.b, epsilon)
+        compress(s_m, self.b, epsilon)
     }
 
     fn finalize(&mut self, epsilon: f64) {
@@ -273,13 +273,11 @@ fn merge<T: Clone + Ord>(s_a: Vec<RankInfo<T>>, s_b: &[RankInfo<T>]) -> Vec<Rank
     s_m
 }
 
-fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Vec<RankInfo<T>> {
-    let mut s_c = Vec::with_capacity(s0.len());
-
+fn compress<T: Clone>(mut s0: Vec<RankInfo<T>>, block_size: usize, epsilon: f64) -> Vec<RankInfo<T>> {
     let mut s0_range = 0;
     let mut e: f64 = 0.0;
 
-    for r in s0 {
+    for r in &s0 {
         if s0_range < r.rmax {
             s0_range = r.rmax;
         }
@@ -294,10 +292,12 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
 
     let mut i = 0;
     let mut j = 0;
-    while i <= block_size && j < s0.len() {
+    let mut k = 0;
+    let n = s0.len();
+    while i <= block_size && j < n {
         let r = ((i as f64) * (s0_range as f64) / (block_size as f64)).floor() as i64;
 
-        while j < s0.len() {
+        while j < n {
             if s0[j].rmax >= r {
                 break;
             }
@@ -305,13 +305,15 @@ fn compress<T: Clone>(s0: &[RankInfo<T>], block_size: usize, epsilon: f64) -> Ve
             j += 1;
         }
 
-        assert!(j < s0.len(), "unable to find the summary with precision given.");
-        s_c.push(s0[j].clone());
+        assert!(j < n, "unable to find the summary with precision given.");
+        s0[k] = s0[j].clone();
+        k += 1;
         j += 1;
         i += 1;
     }
 
-    s_c
+    s0.truncate(k);
+    s0
 }
 
 #[inline]
@@ -398,7 +400,6 @@ where
 
         if let Some(x) = is_boundary(self.cnt + 1, self.epsilon) {
             self.s_c.finalize(self.epsilon / 2.0);
-     
 
             let upper_bound = (((usize::pow(2, x + x) - 1) as f64) / self.epsilon).floor() as usize;
             let n = upper_bound - self.cnt - 1;
@@ -465,7 +466,7 @@ mod tests {
         assert_eq!(merged_rmaxs, vec![1, 3, 6, 8, 11, 13, 15, 16]);
 
         let epsilon: f64 = 0.2;
-        let compressed = compress(&merged, 4, epsilon);
+        let compressed = compress(merged, 4, epsilon);
         let compressed_vals: Vec<i32> = compressed.iter().map(|x| x.val).collect();
         assert_eq!(compressed_vals, vec![1, 4, 7, 12, 17]);
     }
