@@ -32,13 +32,13 @@ fn bench_zw_quantile_update() -> UnboundEpsilonSummary<usize> {
 }
 
 fn bench_gk_quantile_query(s: &mut greenwald_khanna::Stream<usize>) {
-    for rank in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0] {
+    for rank in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
         s.quantile(rank);
     }
 }
 
 fn bench_zw_quantile_query(s: &mut UnboundEpsilonSummary<usize>) {
-    for rank in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0] {
+    for rank in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
         s.query(rank);
     }
 }

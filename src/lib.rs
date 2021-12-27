@@ -40,7 +40,7 @@
 //! let expected = 1;
 //! assert!(expected == ans);
 //! ```
-//! 
+//!
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
