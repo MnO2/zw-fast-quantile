@@ -8,7 +8,7 @@ use quantiles::greenwald_khanna;
 use zw_fast_quantile::UnboundEpsilonSummary;
 
 fn bench_gk_quantile_update() -> greenwald_khanna::Stream<usize> {
-    let n = 1000;
+    let n = 5000;
     let epsilon: f64 = 0.01;
 
     let mut stream = greenwald_khanna::Stream::new(epsilon);
@@ -20,7 +20,7 @@ fn bench_gk_quantile_update() -> greenwald_khanna::Stream<usize> {
 }
 
 fn bench_zw_quantile_update() -> UnboundEpsilonSummary<usize> {
-    let n = 1000;
+    let n = 5000;
     let epsilon: f64 = 0.01;
 
     let mut s = UnboundEpsilonSummary::new(epsilon);
