@@ -398,12 +398,14 @@ where
 
         if let Some(x) = is_boundary(self.cnt + 1, self.epsilon) {
             self.s_c.finalize(self.epsilon / 2.0);
-            self.s.push(self.s_c.clone());
+     
 
             let upper_bound = (((usize::pow(2, x + x) - 1) as f64) / self.epsilon).floor() as usize;
             let n = upper_bound - self.cnt - 1;
-            let summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
-            self.s_c = summary;
+            let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
+            std::mem::swap(&mut self.s_c, &mut summary);
+
+            self.s.push(summary);
         }
         self.cnt += 1;
     }
