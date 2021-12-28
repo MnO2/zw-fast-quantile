@@ -100,6 +100,10 @@ where
     T: Clone + Ord,
 {
     pub fn new(n: usize, epsilon: f64) -> Self {
+        if n == 0 {
+            panic!("n should be greater than 0")
+        }
+
         if epsilon <= 0.0 {
             panic!("epsilon should be greater than 0");
         }
