@@ -100,9 +100,12 @@ where
     T: Clone + Ord,
 {
     pub fn new(n: usize, epsilon: f64) -> Self {
+        if epsilon <= 0.0 {
+            panic!("epsilon should be greater than 0");
+        }
+
         // number_of_leves = ceil(log2(n))
         // block_size = floor(log2(epsilon * N) / epsilon)
-
         let epsilon_n: f64 = (n as f64) * epsilon;
         let number_of_levels = if epsilon_n > 1.0 {
             (epsilon_n as f64).log2().ceil() as usize
@@ -388,6 +391,10 @@ where
     T: Clone + Ord + std::fmt::Debug,
 {
     pub fn new(epsilon: f64) -> Self {
+        if epsilon <= 0.0 {
+            panic!("epsilon should be greater than 0");
+        }
+
         let s = vec![];
 
         let n = (1.0_f64 / epsilon).floor() as usize;
@@ -487,6 +494,18 @@ mod tests {
         let compressed = compress(merged, 4, epsilon);
         let compressed_vals: Vec<i32> = compressed.iter().map(|x| x.val).collect();
         assert_eq!(compressed_vals, vec![1, 4, 7, 12, 17]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_panic_on_negative_epsilon_when_constructing_fixedsize_summary() {
+        let _ = FixedSizeEpsilonSummary::<usize>::new(100, -0.1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_panic_on_negative_epsilon_when_constructing_unbound_summary() {
+        let _ = UnboundEpsilonSummary::<usize>::new(-0.1);
     }
 
     #[test]
