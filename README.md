@@ -91,3 +91,8 @@ Found 8 outliers among 100 measurements (8.00%)
   2 (2.00%) high mild
   5 (5.00%) high severe
 ```
+
+## Related Projects
+
+* [python-binding](https://github.com/MnO2/zw-fast-quantile-py)
+
