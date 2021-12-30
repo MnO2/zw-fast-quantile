@@ -185,8 +185,11 @@ where
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        let e = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n).unwrap();
-        return e;
+        if let Some(e) = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n) {
+            e
+        } else {
+            self.cached_s_m.as_ref().unwrap().last().unwrap().val.clone()
+        }
     }
 
     fn calc_s_m(&mut self, epsilon: f64) -> Vec<RankInfo<T>> {
@@ -450,8 +453,11 @@ where
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        let e = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n).unwrap();
-        return e;
+        if let Some(e) = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n) {
+            e
+        } else {
+            self.cached_s_m.as_ref().unwrap().last().unwrap().val.clone()
+        }
     }
 
     #[inline]
@@ -510,6 +516,20 @@ mod tests {
     #[should_panic]
     fn test_panic_on_negative_epsilon_when_constructing_unbound_summary() {
         let _ = UnboundEpsilonSummary::<usize>::new(-0.1);
+    }
+
+    #[test]
+    fn test_query_unbound_summary_with_insufficient_values() {
+        let epsilon = 0.1;
+        let n = 3;
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+        for i in 1..=n {
+            s.update(i);
+        }
+
+        let rank: f64 = 1.0;
+        let ans = s.query(rank);
+        assert!(n == ans);
     }
 
     #[test]
