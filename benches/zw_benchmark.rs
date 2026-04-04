@@ -1,9 +1,4 @@
-#[macro_use]
-extern crate criterion;
-extern crate quantiles;
-extern crate zw_fast_quantile;
-
-use criterion::Criterion;
+use criterion::{criterion_group, criterion_main, Criterion};
 use quantiles::greenwald_khanna;
 use zw_fast_quantile::{FixedSizeEpsilonSummary, UnboundEpsilonSummary};
 
@@ -23,7 +18,7 @@ fn bench_unbound_zw_quantile_update() -> UnboundEpsilonSummary<usize> {
     let n = 5000;
     let epsilon: f64 = 0.01;
 
-    let mut s = UnboundEpsilonSummary::new(epsilon);
+    let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
     for i in 1..=n {
         s.update(i);
     }
@@ -35,7 +30,7 @@ fn bench_fixed_zw_quantile_update() -> FixedSizeEpsilonSummary<usize> {
     let n = 5000;
     let epsilon: f64 = 0.01;
 
-    let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+    let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
     for i in 1..=n {
         s.update(i);
     }
@@ -51,13 +46,13 @@ fn bench_gk_quantile_query(s: &mut greenwald_khanna::Stream<usize>) {
 
 fn bench_unbound_zw_quantile_query(s: &mut UnboundEpsilonSummary<usize>) {
     for rank in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
-        s.query(rank);
+        s.query(rank).unwrap();
     }
 }
 
 fn bench_fixed_zw_quantile_query(s: &mut FixedSizeEpsilonSummary<usize>) {
     for rank in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0] {
-        s.query(rank);
+        s.query(rank).unwrap();
     }
 }
 

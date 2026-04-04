@@ -556,6 +556,8 @@ impl<T: Clone + Ord + std::fmt::Debug> std::fmt::Debug for UnboundEpsilonSummary
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
     use rand_distr::Distribution;
 
     // INSTRUMENTED_SYSTEM is an instrumented instance of the system allocator
@@ -694,7 +696,7 @@ mod tests {
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
         let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
-        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+        let mut normal_rng = StdRng::seed_from_u64(42);
 
         let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
@@ -738,7 +740,7 @@ mod tests {
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
         let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
-        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+        let mut normal_rng = StdRng::seed_from_u64(42);
 
         let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
@@ -782,7 +784,7 @@ mod tests {
         let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 
         let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
-        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+        let mut normal_rng = StdRng::seed_from_u64(42);
 
         let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
@@ -826,7 +828,7 @@ mod tests {
         let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 
         let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
-        let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
+        let mut normal_rng = StdRng::seed_from_u64(42);
 
         let startmem = stats_alloc::Region::new(&GLOBAL);
         let mut records = Vec::with_capacity(n);
