@@ -230,7 +230,7 @@ where
         }
     }
 
-    fn calc_s_m(&self, epsilon: f64) -> Vec<RankInfo<T>> {
+    fn calc_s_m(&self) -> Vec<RankInfo<T>> {
         let mut s0_clone = self.s[0].clone();
         s0_clone.sort();
         for (i, r) in s0_clone.iter_mut().enumerate() {
@@ -243,11 +243,11 @@ where
             s_m = merge(s_m, &self.s[i])
         }
 
-        compress(s_m, self.b, epsilon)
+        compress(s_m, self.b, self.epsilon)
     }
 
-    fn finalize(&mut self, epsilon: f64) {
-        let s_m = self.calc_s_m(epsilon);
+    fn finalize(&mut self) {
+        let s_m = self.calc_s_m();
         self.s.clear();
         self.s.push(s_m);
     }
@@ -475,7 +475,7 @@ where
                 self.cnt += 1;
                 return;
             }
-            self.s_c.finalize(self.epsilon / 2.0);
+            self.s_c.finalize();
 
             let upper_bound = self.boundaries[x + x];
             let n = upper_bound - self.cnt - 1;
@@ -496,7 +496,7 @@ where
         }
 
         if self.cached_s_m.borrow().is_none() {
-            let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
+            let mut s_m = self.s_c.calc_s_m();
             for i in 0..self.s.len() {
                 for j in 0..self.s[i].s.len() {
                     s_m = merge(s_m, &self.s[i].s[j])
