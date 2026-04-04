@@ -470,6 +470,11 @@ where
         self.s_c.update(e);
 
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
+            if x + x >= self.boundaries.len() {
+                // Beyond the pre-computed boundary range; just increment and continue
+                self.cnt += 1;
+                return;
+            }
             self.s_c.finalize(self.epsilon / 2.0);
 
             let upper_bound = self.boundaries[x + x];
