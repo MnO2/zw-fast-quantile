@@ -11,10 +11,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-zw-fast-quantile = "0.2"
+zw-fast-quantile = "1.0"
 ```
-
-then you are good to go. If you are using Rust 2015 you have to ``extern crate zw-fast-quantile`` to your crate root as well.
 
 ## Example
 
@@ -23,12 +21,12 @@ There are two implementations in this library: `FixedSizeEpsilonSummary` is with
 ```rust
 let epsilon = 0.1;
 let n = 10;
-let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 for i in 1..=n {
     s.update(i);
 }
 
-let ans = s.query(0.0);
+let ans = s.query(0.0).unwrap();
 let expected = 1;
 assert!(expected == ans);
 ```
@@ -36,12 +34,12 @@ assert!(expected == ans);
 ```rust
 let epsilon = 0.1;
 let n = 10;
-let mut s = UnboundEpsilonSummary::new(epsilon);
+let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 for i in 1..=n {
     s.update(i);
 }
 
-let ans = s.query(0.0);
+let ans = s.query(0.0).unwrap();
 let expected = 1;
 assert!(expected == ans);
 ```
@@ -91,6 +89,18 @@ Found 8 outliers among 100 measurements (8.00%)
   2 (2.00%) high mild
   5 (5.00%) high severe
 ```
+
+## Optional Features
+
+- `serde` — Enable serialization/deserialization support via [serde](https://serde.rs/):
+  ```toml
+  [dependencies]
+  zw-fast-quantile = { version = "1.0", features = ["serde"] }
+  ```
+
+## Minimum Supported Rust Version
+
+The MSRV is 1.65.
 
 ## Related Projects
 

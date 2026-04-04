@@ -6,7 +6,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! zw-fast-quantile = "0.1"
+//! zw-fast-quantile = "1.0"
 //! ```
 //!
 //! ## Example
