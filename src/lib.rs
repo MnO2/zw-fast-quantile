@@ -21,7 +21,7 @@
 //!     s.update(i);
 //! }
 //!
-//! let ans = s.query(0.0);
+//! let ans = s.query(0.0).unwrap();
 //! let expected = 1;
 //! assert!(expected == ans);
 //! ```
@@ -37,11 +37,12 @@
 //!     s.update(i);
 //! }
 //!
-//! let ans = s.query(0.0);
+//! let ans = s.query(0.0).unwrap();
 //! let expected = 1;
 //! assert!(expected == ans);
 //! ```
 //!
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt;
 
@@ -120,7 +121,7 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
-    cached_s_m: Option<Vec<RankInfo<T>>>,
+    cached_s_m: RefCell<Option<Vec<RankInfo<T>>>>,
 }
 
 impl<T> FixedSizeEpsilonSummary<T>
@@ -159,12 +160,12 @@ where
             level: number_of_levels,
             cnt: 0,
             s,
-            cached_s_m: None,
+            cached_s_m: RefCell::new(None),
         })
     }
 
     pub fn update(&mut self, e: T) {
-        self.cached_s_m = None;
+        self.cached_s_m.get_mut().take();
         let rank_info = RankInfo::new(e, 0, 0);
         self.s[0].push(rank_info);
 
@@ -195,39 +196,49 @@ where
         }
     }
 
-    pub fn query(&mut self, r: f64) -> T {
-        if self.cached_s_m.is_none() {
-            self.s[0].sort();
-            for (i, r) in self.s[0].iter_mut().enumerate() {
+    pub fn query(&self, r: f64) -> Result<T, QuantileError> {
+        if !(r >= 0.0 && r <= 1.0) {
+            return Err(QuantileError::InvalidRank);
+        }
+        if self.cnt == 0 {
+            return Err(QuantileError::EmptySummary);
+        }
+
+        if self.cached_s_m.borrow().is_none() {
+            // Clone s[0] and sort — do NOT mutate self.s
+            let mut s0_clone = self.s[0].clone();
+            s0_clone.sort();
+            for (i, r) in s0_clone.iter_mut().enumerate() {
                 r.rmin = i as i64;
                 r.rmax = i as i64;
             }
-
-            let mut s_m = self.s[0].clone();
+            let mut s_m = s0_clone;
             for i in 1..self.level {
-                s_m = merge(s_m, &self.s[i])
+                s_m = merge(s_m, &self.s[i]);
             }
-
-            self.cached_s_m = Some(s_m);
+            *self.cached_s_m.borrow_mut() = Some(s_m);
         }
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        if let Some(e) = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n) {
-            e
+        let cache = self.cached_s_m.borrow();
+        let s_m = cache.as_ref().unwrap();
+        if let Some(e) = find_idx(s_m, rank, epsilon_n) {
+            Ok(e)
         } else {
-            self.cached_s_m.as_ref().unwrap().last().unwrap().val.clone()
+            Ok(s_m.last().unwrap().val.clone())
         }
     }
 
-    fn calc_s_m(&mut self, epsilon: f64) -> Vec<RankInfo<T>> {
-        self.s[0].sort();
-        for (i, r) in self.s[0].iter_mut().enumerate() {
+    fn calc_s_m(&self, epsilon: f64) -> Vec<RankInfo<T>> {
+        let mut s0_clone = self.s[0].clone();
+        s0_clone.sort();
+        for (i, r) in s0_clone.iter_mut().enumerate() {
             r.rmin = i as i64;
             r.rmax = i as i64;
         }
 
-        let mut s_m = self.s[0].clone();
+        let mut s_m = s0_clone;
         for i in 1..self.level {
             s_m = merge(s_m, &self.s[i])
         }
@@ -422,7 +433,7 @@ where
     s: Vec<FixedSizeEpsilonSummary<T>>,
     s_c: FixedSizeEpsilonSummary<T>,
     boundaries: [usize; 32],
-    cached_s_m: Option<Vec<RankInfo<T>>>,
+    cached_s_m: RefCell<Option<Vec<RankInfo<T>>>>,
 }
 
 impl<T> UnboundEpsilonSummary<T>
@@ -450,12 +461,12 @@ where
             s,
             s_c,
             boundaries,
-            cached_s_m: None,
+            cached_s_m: RefCell::new(None),
         })
     }
 
     pub fn update(&mut self, e: T) {
-        self.cached_s_m = None;
+        self.cached_s_m.get_mut().take();
         self.s_c.update(e);
 
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
@@ -471,24 +482,32 @@ where
         self.cnt += 1;
     }
 
-    pub fn query(&mut self, r: f64) -> T {
-        if self.cached_s_m.is_none() {
+    pub fn query(&self, r: f64) -> Result<T, QuantileError> {
+        if !(r >= 0.0 && r <= 1.0) {
+            return Err(QuantileError::InvalidRank);
+        }
+        if self.cnt == 0 {
+            return Err(QuantileError::EmptySummary);
+        }
+
+        if self.cached_s_m.borrow().is_none() {
             let mut s_m = self.s_c.calc_s_m(self.epsilon / 2.0);
             for i in 0..self.s.len() {
                 for j in 0..self.s[i].s.len() {
                     s_m = merge(s_m, &self.s[i].s[j])
                 }
             }
-
-            self.cached_s_m = Some(s_m);
+            *self.cached_s_m.borrow_mut() = Some(s_m);
         }
 
         let rank: i64 = ((self.cnt as f64) * r).floor() as i64;
         let epsilon_n: i64 = ((self.cnt as f64) * self.epsilon).floor() as i64;
-        if let Some(e) = find_idx(&self.cached_s_m.as_ref().unwrap(), rank, epsilon_n) {
-            e
+        let cache = self.cached_s_m.borrow();
+        let s_m = cache.as_ref().unwrap();
+        if let Some(e) = find_idx(s_m, rank, epsilon_n) {
+            Ok(e)
         } else {
-            self.cached_s_m.as_ref().unwrap().last().unwrap().val.clone()
+            Ok(s_m.last().unwrap().val.clone())
         }
     }
 
@@ -596,7 +615,7 @@ mod tests {
         }
 
         let rank: f64 = 1.0;
-        let ans = s.query(rank);
+        let ans = s.query(rank).unwrap();
         assert!(n == ans);
     }
 
@@ -611,7 +630,7 @@ mod tests {
 
         for i in 1..=n {
             let rank: f64 = ((i - 1) as f64) / (n as f64);
-            let ans = s.query(rank);
+            let ans = s.query(rank).unwrap();
             assert!(i == ans);
         }
     }
@@ -627,7 +646,7 @@ mod tests {
 
         for i in 1..=n {
             let rank: f64 = ((i - 1) as f64) / (n as f64);
-            let ans = s.query(rank);
+            let ans = s.query(rank).unwrap();
             assert!(i == ans);
         }
     }
@@ -663,16 +682,16 @@ mod tests {
 
         println!("{}k", bytes_change / 1024);
 
-        let quantile_estimated = s.query(0.5);
+        let quantile_estimated = s.query(0.5).unwrap();
         assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.0);
+        let quantile_estimated = s.query(0.0).unwrap();
         assert!((quantile_estimated - records[0]).abs() < 0.1);
 
-        let quantile_estimated = s.query(0.99);
+        let quantile_estimated = s.query(0.99).unwrap();
         assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
 
-        let quantile_estimated = s.query(1.0);
+        let quantile_estimated = s.query(1.0).unwrap();
         assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
     }
 
@@ -707,16 +726,16 @@ mod tests {
 
         println!("{}k", bytes_change / 1024);
 
-        let quantile_estimated = s.query(0.5);
+        let quantile_estimated = s.query(0.5).unwrap();
         assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.0);
+        let quantile_estimated = s.query(0.0).unwrap();
         assert!((quantile_estimated - records[0]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.99);
+        let quantile_estimated = s.query(0.99).unwrap();
         assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
 
-        let quantile_estimated = s.query(1.0);
+        let quantile_estimated = s.query(1.0).unwrap();
         assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
     }
 
@@ -751,16 +770,16 @@ mod tests {
 
         println!("{}k", bytes_change / 1024);
 
-        let quantile_estimated = s.query(0.5);
+        let quantile_estimated = s.query(0.5).unwrap();
         assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.0);
+        let quantile_estimated = s.query(0.0).unwrap();
         assert!((quantile_estimated - records[0]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.99);
+        let quantile_estimated = s.query(0.99).unwrap();
         assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
 
-        let quantile_estimated = s.query(1.0);
+        let quantile_estimated = s.query(1.0).unwrap();
         assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
     }
 
@@ -795,16 +814,16 @@ mod tests {
 
         println!("{}k", bytes_change / 1024);
 
-        let quantile_estimated = s.query(0.5);
+        let quantile_estimated = s.query(0.5).unwrap();
         assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.0);
+        let quantile_estimated = s.query(0.0).unwrap();
         assert!((quantile_estimated - records[0]).abs() < 0.01);
 
-        let quantile_estimated = s.query(0.99);
+        let quantile_estimated = s.query(0.99).unwrap();
         assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
 
-        let quantile_estimated = s.query(1.0);
+        let quantile_estimated = s.query(1.0).unwrap();
         assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
     }
 
@@ -828,5 +847,32 @@ mod tests {
     fn test_find_idx_empty_slice() {
         let empty: Vec<RankInfo<i32>> = vec![];
         assert!(find_idx(&empty, 0, 1).is_none());
+    }
+
+    #[test]
+    fn test_query_returns_error_on_empty_summary() {
+        let s = FixedSizeEpsilonSummary::<usize>::new(10, 0.1).unwrap();
+        assert!(matches!(s.query(0.5), Err(QuantileError::EmptySummary)));
+    }
+
+    #[test]
+    fn test_query_returns_error_on_invalid_rank() {
+        let mut s = FixedSizeEpsilonSummary::new(10, 0.1).unwrap();
+        s.update(1);
+        assert!(matches!(s.query(-0.1), Err(QuantileError::InvalidRank)));
+        assert!(matches!(s.query(1.1), Err(QuantileError::InvalidRank)));
+        assert!(matches!(s.query(f64::NAN), Err(QuantileError::InvalidRank)));
+    }
+
+    #[test]
+    fn test_query_is_immutable() {
+        let mut s = FixedSizeEpsilonSummary::new(10, 0.1).unwrap();
+        for i in 1..=10 {
+            s.update(i);
+        }
+        // query takes &self, not &mut self
+        let s_ref = &s;
+        let _ = s_ref.query(0.5);
+        let _ = s_ref.query(0.9);
     }
 }
