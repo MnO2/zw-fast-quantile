@@ -427,7 +427,7 @@ where
 
 impl<T> UnboundEpsilonSummary<T>
 where
-    T: Clone + Ord + std::fmt::Debug,
+    T: Clone + Ord,
 {
     pub fn new(epsilon: f64) -> Self {
         if epsilon <= 0.0 {
