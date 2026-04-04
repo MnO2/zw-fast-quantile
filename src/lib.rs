@@ -385,24 +385,28 @@ fn is_boundary(x: usize, boundaries: &[usize; 32]) -> Option<usize> {
 }
 
 fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], rank: i64, epsilon_n: i64) -> Option<T> {
+    if s_m.is_empty() {
+        return None;
+    }
+
     let mut l = 0usize;
     let mut r = s_m.len() - 1;
     while l < r {
         let m = l + (r - l) / 2;
         if s_m[m].rmin < rank {
             l = m + 1;
-        } else if s_m[m].rmax > rank {
-            r = m;
         } else {
             r = m;
         }
     }
 
-    while l < s_m.len() && s_m[l].rmin >= rank - epsilon_n {
+    // Scan forward within the epsilon window.
+    // The compress invariant guarantees that if a valid element exists,
+    // it is at or after the binary search landing point.
+    while l < s_m.len() && s_m[l].rmin <= rank + epsilon_n {
         if s_m[l].rmax <= rank + epsilon_n {
             return Some(s_m[l].val.clone());
         }
-
         l += 1;
     }
 
@@ -782,5 +786,11 @@ mod tests {
         // Verify Copy + Clone + PartialEq + Eq
         let e2 = e;
         assert_eq!(e, e2);
+    }
+
+    #[test]
+    fn test_find_idx_empty_slice() {
+        let empty: Vec<RankInfo<i32>> = vec![];
+        assert!(find_idx(&empty, 0, 1).is_none());
     }
 }
