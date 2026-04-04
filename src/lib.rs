@@ -26,7 +26,8 @@
 //! assert!(expected == ans);
 //! ```
 //!
-//! //! ```rust
+//!
+//! ```rust
 //! use zw_fast_quantile::UnboundEpsilonSummary;
 //!
 //! let epsilon = 0.1;
