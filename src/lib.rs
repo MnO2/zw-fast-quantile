@@ -42,6 +42,33 @@
 //! ```
 //!
 use std::cmp::Ordering;
+use std::fmt;
+
+/// Errors that can occur when constructing or querying a quantile summary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuantileError {
+    /// `n` must be greater than 0.
+    InvalidN,
+    /// `epsilon` must be positive and finite.
+    InvalidEpsilon,
+    /// Rank must be between 0.0 and 1.0 (inclusive), and not NaN.
+    InvalidRank,
+    /// Cannot query an empty summary (no values have been inserted).
+    EmptySummary,
+}
+
+impl fmt::Display for QuantileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QuantileError::InvalidN => write!(f, "n must be greater than 0"),
+            QuantileError::InvalidEpsilon => write!(f, "epsilon must be positive and finite"),
+            QuantileError::InvalidRank => write!(f, "rank must be between 0.0 and 1.0"),
+            QuantileError::EmptySummary => write!(f, "cannot query an empty summary"),
+        }
+    }
+}
+
+impl std::error::Error for QuantileError {}
 
 #[derive(Debug, Clone)]
 struct RankInfo<T>
@@ -738,5 +765,21 @@ mod tests {
 
         let quantile_estimated = s.query(1.0);
         assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_error_display_and_debug() {
+        let e = QuantileError::InvalidN;
+        assert_eq!(format!("{}", e), "n must be greater than 0");
+        let e = QuantileError::InvalidEpsilon;
+        assert_eq!(format!("{}", e), "epsilon must be positive and finite");
+        let e = QuantileError::InvalidRank;
+        assert_eq!(format!("{}", e), "rank must be between 0.0 and 1.0");
+        let e = QuantileError::EmptySummary;
+        assert_eq!(format!("{}", e), "cannot query an empty summary");
+
+        // Verify Copy + Clone + PartialEq + Eq
+        let e2 = e;
+        assert_eq!(e, e2);
     }
 }
