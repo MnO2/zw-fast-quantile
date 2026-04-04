@@ -73,6 +73,7 @@ impl fmt::Display for QuantileError {
 impl std::error::Error for QuantileError {}
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct RankInfo<T>
 where
     T: Clone,
@@ -112,6 +113,7 @@ impl<T: Clone + PartialEq> PartialEq for RankInfo<T> {
 impl<T: Clone + PartialEq> Eq for RankInfo<T> {}
 
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
@@ -121,6 +123,7 @@ where
     level: usize,
     cnt: usize,
     s: Vec<Vec<RankInfo<T>>>,
+    #[cfg_attr(feature = "serde", serde(skip))]
     cached_s_m: RefCell<Option<Vec<RankInfo<T>>>>,
 }
 
@@ -438,6 +441,7 @@ fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], rank: i64, epsilon_n: i64) -> O
     None
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
@@ -447,6 +451,7 @@ where
     s: Vec<FixedSizeEpsilonSummary<T>>,
     s_c: FixedSizeEpsilonSummary<T>,
     boundaries: [usize; 32],
+    #[cfg_attr(feature = "serde", serde(skip))]
     cached_s_m: RefCell<Option<Vec<RankInfo<T>>>>,
 }
 
@@ -916,5 +921,31 @@ mod tests {
         let s = UnboundEpsilonSummary::<usize>::new(0.1).unwrap();
         let debug_str = format!("{:?}", s);
         assert!(debug_str.contains("UnboundEpsilonSummary"));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde_roundtrip_fixedsize() {
+        let mut s = FixedSizeEpsilonSummary::new(100, 0.1).unwrap();
+        for i in 1..=100usize {
+            s.update(i);
+        }
+        let serialized = serde_json::to_string(&s).unwrap();
+        let deserialized: FixedSizeEpsilonSummary<usize> =
+            serde_json::from_str(&serialized).unwrap();
+        assert_eq!(s.query(0.5).unwrap(), deserialized.query(0.5).unwrap());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde_roundtrip_unbound() {
+        let mut s = UnboundEpsilonSummary::new(0.1).unwrap();
+        for i in 1..=100usize {
+            s.update(i);
+        }
+        let serialized = serde_json::to_string(&s).unwrap();
+        let deserialized: UnboundEpsilonSummary<usize> =
+            serde_json::from_str(&serialized).unwrap();
+        assert_eq!(s.query(0.5).unwrap(), deserialized.query(0.5).unwrap());
     }
 }
