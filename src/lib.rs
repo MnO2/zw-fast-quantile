@@ -98,7 +98,7 @@ impl<T: Clone + Ord> Ord for RankInfo<T> {
 
 impl<T: Clone + Ord> PartialOrd for RankInfo<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.val.partial_cmp(&other.val)
+        Some(self.cmp(other))
     }
 }
 
