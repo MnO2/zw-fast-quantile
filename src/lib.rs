@@ -16,7 +16,7 @@
 //!
 //! let epsilon = 0.1;
 //! let n = 10;
-//! let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+//! let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 //! for i in 1..=n {
 //!     s.update(i);
 //! }
@@ -32,7 +32,7 @@
 //!
 //! let epsilon = 0.1;
 //! let n = 10;
-//! let mut s = UnboundEpsilonSummary::new(epsilon);
+//! let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 //! for i in 1..=n {
 //!     s.update(i);
 //! }
@@ -127,13 +127,13 @@ impl<T> FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
-    pub fn new(n: usize, epsilon: f64) -> Self {
+    pub fn new(n: usize, epsilon: f64) -> Result<Self, QuantileError> {
         if n == 0 {
-            panic!("n should be greater than 0")
+            return Err(QuantileError::InvalidN);
         }
 
-        if epsilon <= 0.0 {
-            panic!("epsilon should be greater than 0");
+        if !(epsilon > 0.0 && epsilon.is_finite()) {
+            return Err(QuantileError::InvalidEpsilon);
         }
 
         // number_of_leves = ceil(log2(n))
@@ -153,14 +153,14 @@ where
         let mut s = vec![vec![]; number_of_levels];
         s[0].reserve_exact(block_size);
 
-        FixedSizeEpsilonSummary {
+        Ok(FixedSizeEpsilonSummary {
             epsilon,
             b: block_size,
             level: number_of_levels,
             cnt: 0,
             s,
             cached_s_m: None,
-        }
+        })
     }
 
     pub fn update(&mut self, e: T) {
@@ -429,29 +429,29 @@ impl<T> UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
-    pub fn new(epsilon: f64) -> Self {
-        if epsilon <= 0.0 {
-            panic!("epsilon should be greater than 0");
+    pub fn new(epsilon: f64) -> Result<Self, QuantileError> {
+        if !(epsilon > 0.0 && epsilon.is_finite()) {
+            return Err(QuantileError::InvalidEpsilon);
         }
 
         let s = vec![];
 
         let n = (1.0_f64 / epsilon).floor() as usize;
-        let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0);
+        let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0)?;
         let mut boundaries: [usize; 32] = [0; 32];
         for i in 0..32usize {
             let boundary = (((usize::pow(2, i as u32) - 1) as f64) / epsilon).floor() as usize;
             boundaries[i] = boundary
         }
 
-        UnboundEpsilonSummary {
+        Ok(UnboundEpsilonSummary {
             epsilon,
             cnt: 0,
             s,
             s_c,
             boundaries,
             cached_s_m: None,
-        }
+        })
     }
 
     pub fn update(&mut self, e: T) {
@@ -463,7 +463,7 @@ where
 
             let upper_bound = self.boundaries[x + x];
             let n = upper_bound - self.cnt - 1;
-            let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0);
+            let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0).unwrap();
             std::mem::swap(&mut self.s_c, &mut summary);
 
             self.s.push(summary);
@@ -539,22 +539,58 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn test_panic_on_negative_epsilon_when_constructing_fixedsize_summary() {
-        let _ = FixedSizeEpsilonSummary::<usize>::new(100, -0.1);
+    fn test_fixedsize_constructor_returns_error_on_zero_n() {
+        assert!(matches!(
+            FixedSizeEpsilonSummary::<usize>::new(0, 0.1),
+            Err(QuantileError::InvalidN)
+        ));
     }
 
     #[test]
-    #[should_panic]
-    fn test_panic_on_negative_epsilon_when_constructing_unbound_summary() {
-        let _ = UnboundEpsilonSummary::<usize>::new(-0.1);
+    fn test_fixedsize_constructor_returns_error_on_negative_epsilon() {
+        assert!(matches!(
+            FixedSizeEpsilonSummary::<usize>::new(100, -0.1),
+            Err(QuantileError::InvalidEpsilon)
+        ));
+    }
+
+    #[test]
+    fn test_fixedsize_constructor_returns_error_on_nan_epsilon() {
+        assert!(matches!(
+            FixedSizeEpsilonSummary::<usize>::new(100, f64::NAN),
+            Err(QuantileError::InvalidEpsilon)
+        ));
+    }
+
+    #[test]
+    fn test_fixedsize_constructor_returns_error_on_inf_epsilon() {
+        assert!(matches!(
+            FixedSizeEpsilonSummary::<usize>::new(100, f64::INFINITY),
+            Err(QuantileError::InvalidEpsilon)
+        ));
+    }
+
+    #[test]
+    fn test_unbound_constructor_returns_error_on_negative_epsilon() {
+        assert!(matches!(
+            UnboundEpsilonSummary::<usize>::new(-0.1),
+            Err(QuantileError::InvalidEpsilon)
+        ));
+    }
+
+    #[test]
+    fn test_unbound_constructor_returns_error_on_nan_epsilon() {
+        assert!(matches!(
+            UnboundEpsilonSummary::<usize>::new(f64::NAN),
+            Err(QuantileError::InvalidEpsilon)
+        ));
     }
 
     #[test]
     fn test_query_unbound_summary_with_insufficient_values() {
         let epsilon = 0.1;
         let n = 3;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
         for i in 1..=n {
             s.update(i);
         }
@@ -568,7 +604,7 @@ mod tests {
     fn test_query_with_small_n_on_fixedsize_summary() {
         let epsilon = 0.1;
         let n = 10;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
         for i in 1..=n {
             s.update(i);
         }
@@ -584,7 +620,7 @@ mod tests {
     fn test_query_with_small_n_on_unbound_summary() {
         let epsilon = 0.1;
         let n = 10;
-        let mut s = UnboundEpsilonSummary::new(epsilon);
+        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
         for i in 1..=n {
             s.update(i);
         }
@@ -600,7 +636,7 @@ mod tests {
     fn test_normal_distribution_generated_seq_on_fixed_summary() {
         let n = 1000000;
         let epsilon: f64 = 0.01;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
         let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
         let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
@@ -644,7 +680,7 @@ mod tests {
     fn test_pareto_distribution_generated_seq_on_fixed_summary() {
         let n = 1000000;
         let epsilon: f64 = 0.001;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon);
+        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
 
         let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
         let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
@@ -688,7 +724,7 @@ mod tests {
     fn test_normal_distribution_generated_seq_on_unbound_summary() {
         let n = 1000000;
         let epsilon: f64 = 0.01;
-        let mut s = UnboundEpsilonSummary::new(epsilon);
+        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 
         let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
         let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
@@ -732,7 +768,7 @@ mod tests {
     fn test_pareto_distribution_generated_seq_on_unbound_summary() {
         let n = 1000000;
         let epsilon: f64 = 0.001;
-        let mut s = UnboundEpsilonSummary::new(epsilon);
+        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
 
         let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
         let mut normal_rng = rand_pcg::Pcg64::new(0xcafef00dd15ea5e5, 0xa02bdbf7bb3c0a7ac28fa16a64abf96);
