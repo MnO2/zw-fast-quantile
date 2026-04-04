@@ -128,6 +128,7 @@ impl<T> FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
+    #[must_use]
     pub fn new(n: usize, epsilon: f64) -> Result<Self, QuantileError> {
         if n == 0 {
             return Err(QuantileError::InvalidN);
@@ -196,6 +197,7 @@ where
         }
     }
 
+    #[must_use]
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
         if !(r >= 0.0 && r <= 1.0) {
             return Err(QuantileError::InvalidRank);
@@ -253,8 +255,20 @@ where
     }
 
     #[inline]
+    #[must_use]
     pub fn size(&self) -> usize {
         self.cnt
+    }
+}
+
+impl<T: Clone + Ord + std::fmt::Debug> std::fmt::Debug for FixedSizeEpsilonSummary<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FixedSizeEpsilonSummary")
+            .field("epsilon", &self.epsilon)
+            .field("b", &self.b)
+            .field("level", &self.level)
+            .field("cnt", &self.cnt)
+            .finish()
     }
 }
 
@@ -440,6 +454,7 @@ impl<T> UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
+    #[must_use]
     pub fn new(epsilon: f64) -> Result<Self, QuantileError> {
         if !(epsilon > 0.0 && epsilon.is_finite()) {
             return Err(QuantileError::InvalidEpsilon);
@@ -487,6 +502,7 @@ where
         self.cnt += 1;
     }
 
+    #[must_use]
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
         if !(r >= 0.0 && r <= 1.0) {
             return Err(QuantileError::InvalidRank);
@@ -517,8 +533,18 @@ where
     }
 
     #[inline]
+    #[must_use]
     pub fn size(&self) -> usize {
         self.cnt
+    }
+}
+
+impl<T: Clone + Ord + std::fmt::Debug> std::fmt::Debug for UnboundEpsilonSummary<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UnboundEpsilonSummary")
+            .field("epsilon", &self.epsilon)
+            .field("cnt", &self.cnt)
+            .finish()
     }
 }
 
@@ -879,5 +905,16 @@ mod tests {
         let s_ref = &s;
         let _ = s_ref.query(0.5);
         let _ = s_ref.query(0.9);
+    }
+
+    #[test]
+    fn test_debug_impls() {
+        let s = FixedSizeEpsilonSummary::<usize>::new(10, 0.1).unwrap();
+        let debug_str = format!("{:?}", s);
+        assert!(debug_str.contains("FixedSizeEpsilonSummary"));
+
+        let s = UnboundEpsilonSummary::<usize>::new(0.1).unwrap();
+        let debug_str = format!("{:?}", s);
+        assert!(debug_str.contains("UnboundEpsilonSummary"));
     }
 }
