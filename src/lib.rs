@@ -131,7 +131,6 @@ impl<T> FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
-    #[must_use]
     pub fn new(n: usize, epsilon: f64) -> Result<Self, QuantileError> {
         if n == 0 {
             return Err(QuantileError::InvalidN);
@@ -145,7 +144,7 @@ where
         // block_size = floor(log2(epsilon * N) / epsilon)
         let epsilon_n: f64 = (n as f64) * epsilon;
         let number_of_levels = if epsilon_n > 1.0 {
-            (epsilon_n as f64).log2().ceil() as usize
+            epsilon_n.log2().ceil() as usize
         } else {
             1
         };
@@ -200,9 +199,8 @@ where
         }
     }
 
-    #[must_use]
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
-        if !(r >= 0.0 && r <= 1.0) {
+        if !(0.0..=1.0).contains(&r) {
             return Err(QuantileError::InvalidRank);
         }
         if self.cnt == 0 {
@@ -459,7 +457,6 @@ impl<T> UnboundEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
-    #[must_use]
     pub fn new(epsilon: f64) -> Result<Self, QuantileError> {
         if !(epsilon > 0.0 && epsilon.is_finite()) {
             return Err(QuantileError::InvalidEpsilon);
@@ -470,9 +467,8 @@ where
         let n = (1.0_f64 / epsilon).floor() as usize;
         let s_c = FixedSizeEpsilonSummary::new(n, epsilon / 2.0)?;
         let mut boundaries: [usize; 32] = [0; 32];
-        for i in 0..32usize {
-            let boundary = (((usize::pow(2, i as u32) - 1) as f64) / epsilon).floor() as usize;
-            boundaries[i] = boundary
+        for (i, b) in boundaries.iter_mut().enumerate() {
+            *b = (((usize::pow(2, i as u32) - 1) as f64) / epsilon).floor() as usize;
         }
 
         Ok(UnboundEpsilonSummary {
@@ -507,9 +503,8 @@ where
         self.cnt += 1;
     }
 
-    #[must_use]
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
-        if !(r >= 0.0 && r <= 1.0) {
+        if !(0.0..=1.0).contains(&r) {
             return Err(QuantileError::InvalidRank);
         }
         if self.cnt == 0 {
@@ -556,8 +551,8 @@ impl<T: Clone + Ord + std::fmt::Debug> std::fmt::Debug for UnboundEpsilonSummary
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use rand::SeedableRng;
     use rand_distr::Distribution;
 
     // INSTRUMENTED_SYSTEM is an instrumented instance of the system allocator
@@ -933,8 +928,7 @@ mod tests {
             s.update(i);
         }
         let serialized = serde_json::to_string(&s).unwrap();
-        let deserialized: FixedSizeEpsilonSummary<usize> =
-            serde_json::from_str(&serialized).unwrap();
+        let deserialized: FixedSizeEpsilonSummary<usize> = serde_json::from_str(&serialized).unwrap();
         assert_eq!(s.query(0.5).unwrap(), deserialized.query(0.5).unwrap());
     }
 
@@ -946,8 +940,7 @@ mod tests {
             s.update(i);
         }
         let serialized = serde_json::to_string(&s).unwrap();
-        let deserialized: UnboundEpsilonSummary<usize> =
-            serde_json::from_str(&serialized).unwrap();
+        let deserialized: UnboundEpsilonSummary<usize> = serde_json::from_str(&serialized).unwrap();
         assert_eq!(s.query(0.5).unwrap(), deserialized.query(0.5).unwrap());
     }
 }
