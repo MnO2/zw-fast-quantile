@@ -114,11 +114,15 @@ impl<T: Clone + PartialEq> Eq for RankInfo<T> {}
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// An epsilon-approximate quantile summary for a stream with a known size.
+///
+/// The summary accepts at most the `n` elements declared in [`Self::new`].
 pub struct FixedSizeEpsilonSummary<T>
 where
     T: Clone + Ord,
 {
     epsilon: f64,
+    capacity: usize,
     b: usize,
     level: usize,
     cnt: usize,
@@ -159,6 +163,7 @@ where
 
         Ok(FixedSizeEpsilonSummary {
             epsilon,
+            capacity: n,
             b: block_size,
             level: number_of_levels,
             cnt: 0,
@@ -167,7 +172,17 @@ where
         })
     }
 
+    /// Adds an element to the summary.
+    ///
+    /// # Panics
+    ///
+    /// Panics if more than the `n` elements declared in [`Self::new`] are added.
     pub fn update(&mut self, e: T) {
+        assert!(
+            self.cnt < self.capacity,
+            "FixedSizeEpsilonSummary capacity exceeded: constructed for n={} elements",
+            self.capacity
+        );
         self.cached_s_m.get_mut().take();
         let rank_info = RankInfo::new(e, 0, 0);
         self.s[0].push(rank_info);
@@ -187,9 +202,11 @@ where
         let mut s_c = compress(self.s[0].clone(), compressed_size, self.epsilon);
 
         self.s[0].clear();
+        let mut stored = false;
         for k in 1..self.level {
             if self.s[k].is_empty() {
                 self.s[k] = s_c;
+                stored = true;
                 break;
             } else {
                 let t = merge(s_c, &self.s[k]);
@@ -197,6 +214,7 @@ where
                 self.s[k].clear();
             }
         }
+        debug_assert!(stored, "capacity invariant guarantees an empty summary level");
     }
 
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
@@ -487,7 +505,8 @@ where
 
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
             if x + x >= self.boundaries.len() {
-                // Beyond the pre-computed boundary range; just increment and continue
+                // The summary created at boundary 15 is sized through boundary 30,
+                // so it has headroom after boundary rotation stops at x = 16.
                 self.cnt += 1;
                 return;
             }
@@ -552,6 +571,7 @@ impl<T: Clone + Ord + std::fmt::Debug> std::fmt::Debug for UnboundEpsilonSummary
 mod tests {
     use super::*;
     use rand::rngs::StdRng;
+    use rand::Rng;
     use rand::SeedableRng;
     use rand_distr::Distribution;
 
@@ -666,6 +686,69 @@ mod tests {
             let ans = s.query(rank).unwrap();
             assert!(i == ans);
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "FixedSizeEpsilonSummary capacity exceeded")]
+    fn test_fixedsize_update_panics_when_capacity_is_exceeded() {
+        let mut s = FixedSizeEpsilonSummary::new(10, 0.1).unwrap();
+        for i in 0..=10 {
+            s.update(i);
+        }
+    }
+
+    fn assert_rank_error<F>(n: usize, epsilon: f64, mut update: F, query: impl Fn(f64) -> u64)
+    where
+        F: FnMut(u64),
+    {
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut records = Vec::with_capacity(n);
+        for _ in 0..n {
+            let value = rng.random::<u64>();
+            records.push(value);
+            update(value);
+        }
+        records.sort_unstable();
+
+        let allowed_error = (epsilon * n as f64).ceil() as usize;
+        for step in 0..=100 {
+            let rank = step as f64 / 100.0;
+            let target = (rank * n as f64).floor() as usize;
+            let value = query(rank);
+            let low = records.partition_point(|x| *x < value);
+            let high = records.partition_point(|x| *x <= value);
+
+            assert!(
+                low <= target.saturating_add(allowed_error) && target <= high.saturating_add(allowed_error),
+                "rank {rank}: value rank interval [{low}, {high}] misses target {target} by more than {allowed_error}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fixedsize_summary_respects_rank_error_contract() {
+        let n = 10_000;
+        let epsilon = 0.01;
+        let summary = RefCell::new(FixedSizeEpsilonSummary::new(n, epsilon).unwrap());
+        assert_rank_error(
+            n,
+            epsilon,
+            |value| summary.borrow_mut().update(value),
+            |rank| summary.borrow().query(rank).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_unbound_summary_respects_rank_error_contract() {
+        let n = 100_000;
+        let epsilon = 0.01;
+        let summary = RefCell::new(UnboundEpsilonSummary::new(epsilon).unwrap());
+        assert_rank_error(
+            n,
+            epsilon,
+            |value| summary.borrow_mut().update(value),
+            |rank| summary.borrow().query(rank).unwrap(),
+        );
     }
 
     #[test]

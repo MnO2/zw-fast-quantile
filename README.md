@@ -29,6 +29,7 @@ zw-fast-quantile = "1.0"
 ### FixedSizeEpsilonSummary
 
 Use when the total number of elements is known ahead of time. This allows tighter memory allocation.
+Inserting more than the declared stream size `n` panics.
 
 ```rust
 use zw_fast_quantile::FixedSizeEpsilonSummary;
@@ -154,4 +155,3 @@ The MSRV is **1.65**.
 ## License
 
 Licensed under [Apache-2.0](LICENSE).
-
