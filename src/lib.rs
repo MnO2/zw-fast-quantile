@@ -192,16 +192,15 @@ where
             return;
         }
 
-        self.s[0].sort();
+        self.s[0].sort_unstable();
         for (i, r) in self.s[0].iter_mut().enumerate() {
             r.rmin = i as i64;
             r.rmax = i as i64;
         }
 
         let compressed_size = self.b / 2;
-        let mut s_c = compress(self.s[0].clone(), compressed_size, self.epsilon);
-
-        self.s[0].clear();
+        let block = std::mem::replace(&mut self.s[0], Vec::with_capacity(self.b));
+        let mut s_c = compress(block, compressed_size, self.epsilon);
         let mut stored = false;
         for k in 1..self.level {
             if self.s[k].is_empty() {
@@ -228,7 +227,7 @@ where
         if self.cached_s_m.borrow().is_none() {
             // Clone s[0] and sort — do NOT mutate self.s
             let mut s0_clone = self.s[0].clone();
-            s0_clone.sort();
+            s0_clone.sort_unstable();
             for (i, r) in s0_clone.iter_mut().enumerate() {
                 r.rmin = i as i64;
                 r.rmax = i as i64;
@@ -253,7 +252,7 @@ where
 
     fn calc_s_m(&self) -> Vec<RankInfo<T>> {
         let mut s0_clone = self.s[0].clone();
-        s0_clone.sort();
+        s0_clone.sort_unstable();
         for (i, r) in s0_clone.iter_mut().enumerate() {
             r.rmin = i as i64;
             r.rmax = i as i64;
