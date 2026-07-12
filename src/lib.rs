@@ -144,18 +144,21 @@ where
             return Err(QuantileError::InvalidEpsilon);
         }
 
-        // number_of_leves = ceil(log2(n))
         // block_size = floor(log2(epsilon * N) / epsilon)
         let epsilon_n: f64 = (n as f64) * epsilon;
-        let number_of_levels = if epsilon_n > 1.0 {
-            epsilon_n.log2().ceil() as usize
-        } else {
-            1
-        };
-        let block_size = if number_of_levels > 1 {
-            (epsilon_n.log2() / epsilon).floor() as usize
+        let block_size = if epsilon_n > 1.0 {
+            ((epsilon_n.log2() / epsilon).floor() as usize).max(1)
         } else {
             n + 1
+        };
+        // Full blocks propagate through the merge levels like binary carries.
+        // The bit width of their maximum count gives the required merge levels;
+        // add one for level 0.
+        let number_of_levels = if epsilon_n > 1.0 {
+            let full_blocks = n / block_size;
+            (usize::BITS - full_blocks.leading_zeros()) as usize + 1
+        } else {
+            1
         };
 
         let mut s = vec![vec![]; number_of_levels];
@@ -213,7 +216,11 @@ where
                 self.s[k].clear();
             }
         }
-        debug_assert!(stored, "capacity invariant guarantees an empty summary level");
+        debug_assert!(
+            stored,
+            "capacity invariant failed: capacity={}, count={}, block_size={}, levels={}",
+            self.capacity, self.cnt, self.b, self.level
+        );
     }
 
     pub fn query(&self, r: f64) -> Result<T, QuantileError> {
@@ -504,15 +511,16 @@ where
         self.s_c.update(e);
 
         if let Some(x) = is_boundary(self.cnt + 1, &self.boundaries) {
-            if x + x >= self.boundaries.len() {
-                // The summary created at boundary 15 is sized through boundary 30,
-                // so it has headroom after boundary rotation stops at x = 16.
+            if x + 1 >= self.boundaries.len() {
+                // The pre-computed boundary table is exhausted.
                 self.cnt += 1;
                 return;
             }
             self.s_c.finalize();
 
-            let upper_bound = self.boundaries[x + x];
+            // Zhang and Wang, SSDBM 2007, section 3.2 defines P_x as the
+            // interval between boundaries x and x + 1.
+            let upper_bound = self.boundaries[x + 1];
             let n = upper_bound - self.cnt - 1;
             let mut summary = FixedSizeEpsilonSummary::new(n, self.epsilon / 2.0).unwrap();
             std::mem::swap(&mut self.s_c, &mut summary);
@@ -738,6 +746,19 @@ mod tests {
     fn test_unbound_summary_respects_rank_error_contract() {
         let n = 100_000;
         let epsilon = 0.01;
+        let summary = RefCell::new(UnboundEpsilonSummary::new(epsilon).unwrap());
+        assert_rank_error(
+            n,
+            epsilon,
+            |value| summary.borrow_mut().update(value),
+            |rank| summary.borrow().query(rank).unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_unbound_summary_respects_rank_error_contract_past_boundary_16() {
+        let n = 2_000_000;
+        let epsilon = 0.1;
         let summary = RefCell::new(UnboundEpsilonSummary::new(epsilon).unwrap());
         assert_rank_error(
             n,
