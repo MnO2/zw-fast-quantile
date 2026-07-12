@@ -553,12 +553,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stats_alloc"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a260c96bf26273969f360c2fc2e2c7732acc2ce49d939c7243c7230c2ad179d0"
-
-[[package]]
 name = "syn"
 version = "1.0.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,5 +763,4 @@ dependencies = [
  "rand_distr",
  "serde",
  "serde_json",
- "stats_alloc",
 ]

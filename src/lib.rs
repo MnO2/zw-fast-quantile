@@ -457,6 +457,7 @@ fn find_idx<T: Clone + Ord>(s_m: &[RankInfo<T>], rank: i64, epsilon_n: i64) -> O
     None
 }
 
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UnboundEpsilonSummary<T>
 where
@@ -575,10 +576,6 @@ mod tests {
     use rand::SeedableRng;
     use rand_distr::Distribution;
 
-    // INSTRUMENTED_SYSTEM is an instrumented instance of the system allocator
-    #[global_allocator]
-    static GLOBAL: &stats_alloc::StatsAlloc<std::alloc::System> = &stats_alloc::INSTRUMENTED_SYSTEM;
-
     #[test]
     fn test_merge_and_compress() {
         let mut s0 = Vec::with_capacity(4);
@@ -659,7 +656,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_unbound_summary_with_insufficient_values() {
+    fn test_query_fixed_summary_with_insufficient_values() {
         let epsilon = 0.1;
         let n = 3;
         let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
@@ -767,180 +764,103 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_normal_distribution_generated_seq_on_fixed_summary() {
-        let n = 1000000;
-        let epsilon: f64 = 0.01;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
+    trait TestSummary<T> {
+        fn update(&mut self, value: T);
+        fn query(&self, rank: f64) -> T;
+    }
 
-        let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
-        let mut normal_rng = StdRng::seed_from_u64(42);
+    impl<T: Clone + Ord> TestSummary<T> for FixedSizeEpsilonSummary<T> {
+        fn update(&mut self, value: T) {
+            self.update(value);
+        }
 
-        let startmem = stats_alloc::Region::new(&GLOBAL);
+        fn query(&self, rank: f64) -> T {
+            self.query(rank).unwrap()
+        }
+    }
+
+    impl<T: Clone + Ord> TestSummary<T> for UnboundEpsilonSummary<T> {
+        fn update(&mut self, value: T) {
+            self.update(value);
+        }
+
+        fn query(&self, rank: f64) -> T {
+            self.query(rank).unwrap()
+        }
+    }
+
+    fn assert_distribution_queries<D, S>(mut summary: S, distribution: D, n: usize, tolerances: [f64; 4])
+    where
+        D: Distribution<f64>,
+        S: TestSummary<ordered_float::NotNan<f64>>,
+    {
+        let mut rng = StdRng::seed_from_u64(42);
         let mut records = Vec::with_capacity(n);
         for _ in 0..n {
-            let x = dn.sample(&mut normal_rng);
-            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
+            records.push(ordered_float::NotNan::new(distribution.sample(&mut rng)).unwrap());
         }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        for i in 0..n {
-            s.update(records[i]);
+        records.sort_unstable();
+        for &value in &records {
+            summary.update(value);
         }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
 
-        println!("{}k", bytes_change / 1024);
+        for (rank, index, tolerance) in [
+            (0.5, n / 2, tolerances[0]),
+            (0.0, 0, tolerances[1]),
+            (0.99, n * 99 / 100, tolerances[2]),
+            (1.0, n - 1, tolerances[3]),
+        ] {
+            assert!((summary.query(rank) - records[index]).abs() < tolerance);
+        }
+    }
 
-        let quantile_estimated = s.query(0.5).unwrap();
-        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.0).unwrap();
-        assert!((quantile_estimated - records[0]).abs() < 0.1);
-
-        let quantile_estimated = s.query(0.99).unwrap();
-        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
-
-        let quantile_estimated = s.query(1.0).unwrap();
-        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+    #[test]
+    fn test_normal_distribution_generated_seq_on_fixed_summary() {
+        let n = 1_000_000;
+        assert_distribution_queries(
+            FixedSizeEpsilonSummary::new(n, 0.01).unwrap(),
+            rand_distr::Normal::new(0.5, 0.2).unwrap(),
+            n,
+            [0.01, 0.1, 0.01, 0.01],
+        );
     }
 
     #[test]
     fn test_pareto_distribution_generated_seq_on_fixed_summary() {
-        let n = 1000000;
-        let epsilon: f64 = 0.001;
-        let mut s = FixedSizeEpsilonSummary::new(n, epsilon).unwrap();
-
-        let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
-        let mut normal_rng = StdRng::seed_from_u64(42);
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        let mut records = Vec::with_capacity(n);
-        for _ in 0..n {
-            let x = dn.sample(&mut normal_rng);
-            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        for i in 0..n {
-            s.update(records[i]);
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        let quantile_estimated = s.query(0.5).unwrap();
-        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.0).unwrap();
-        assert!((quantile_estimated - records[0]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.99).unwrap();
-        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
-
-        let quantile_estimated = s.query(1.0).unwrap();
-        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+        let n = 1_000_000;
+        assert_distribution_queries(
+            FixedSizeEpsilonSummary::new(n, 0.001).unwrap(),
+            rand_distr::Pareto::new(5.0, 10.0).unwrap(),
+            n,
+            [0.01; 4],
+        );
     }
 
     #[test]
     fn test_normal_distribution_generated_seq_on_unbound_summary() {
-        let n = 1000000;
-        let epsilon: f64 = 0.01;
-        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
-
-        let dn = rand_distr::Normal::new(0.5f64, 0.2f64).unwrap();
-        let mut normal_rng = StdRng::seed_from_u64(42);
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        let mut records = Vec::with_capacity(n);
-        for _ in 0..n {
-            let x = dn.sample(&mut normal_rng);
-            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        for i in 0..n {
-            s.update(records[i]);
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        let quantile_estimated = s.query(0.5).unwrap();
-        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.0).unwrap();
-        assert!((quantile_estimated - records[0]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.99).unwrap();
-        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
-
-        let quantile_estimated = s.query(1.0).unwrap();
-        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+        assert_distribution_queries(
+            UnboundEpsilonSummary::new(0.01).unwrap(),
+            rand_distr::Normal::new(0.5, 0.2).unwrap(),
+            1_000_000,
+            [0.01; 4],
+        );
     }
 
     #[test]
     fn test_pareto_distribution_generated_seq_on_unbound_summary() {
-        let n = 1000000;
-        let epsilon: f64 = 0.001;
-        let mut s = UnboundEpsilonSummary::new(epsilon).unwrap();
+        assert_distribution_queries(
+            UnboundEpsilonSummary::new(0.001).unwrap(),
+            rand_distr::Pareto::new(5.0, 10.0).unwrap(),
+            1_000_000,
+            [0.01; 4],
+        );
+    }
 
-        let dn = rand_distr::Pareto::new(5f64, 10f64).unwrap();
-        let mut normal_rng = StdRng::seed_from_u64(42);
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        let mut records = Vec::with_capacity(n);
-        for _ in 0..n {
-            let x = dn.sample(&mut normal_rng);
-            records.push(unsafe { ordered_float::NotNan::new_unchecked(x) });
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        records.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let startmem = stats_alloc::Region::new(&GLOBAL);
-        for i in 0..n {
-            s.update(records[i]);
-        }
-        let mem = startmem.change();
-        let bytes_change = mem.bytes_allocated as isize - mem.bytes_deallocated as isize + mem.bytes_reallocated;
-
-        println!("{}k", bytes_change / 1024);
-
-        let quantile_estimated = s.query(0.5).unwrap();
-        assert!((quantile_estimated - records[n / 2]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.0).unwrap();
-        assert!((quantile_estimated - records[0]).abs() < 0.01);
-
-        let quantile_estimated = s.query(0.99).unwrap();
-        assert!((quantile_estimated - records[n * 99 / 100]).abs() < 0.01);
-
-        let quantile_estimated = s.query(1.0).unwrap();
-        assert!((quantile_estimated - records[n - 1]).abs() < 0.01);
+    #[test]
+    fn test_unbound_summary_clone_preserves_queries() {
+        let mut summary = UnboundEpsilonSummary::new(0.1).unwrap();
+        summary.update(1);
+        assert_eq!(summary.query(0.5), summary.clone().query(0.5));
     }
 
     #[test]
