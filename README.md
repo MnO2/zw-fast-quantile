@@ -99,29 +99,15 @@ A query for rank `r` on a stream of `n` elements will return an element whose tr
 
 ## Benchmarks
 
-Benchmarked against GK01 from the [quantiles](https://github.com/postmates/quantiles) crate. Inserting 5000 values with `epsilon = 0.01`:
+Benchmarked against GK01 from the [quantiles](https://github.com/postmates/quantiles) crate with 5,000 values and `epsilon = 0.01`. Representative Criterion medians from July 2026 are:
 
-**Update (insertion) performance** — ZW is ~2.6x faster:
+| Operation | ZW fixed | ZW unbounded | GK01 |
+|-----------|---------:|-------------:|-----:|
+| Insert 5,000 values | 26.23 µs | 36.62 µs | 104.24 µs |
+| Query 10 quantiles, warm cache | 120.4 ns | 145.6 ns | 127.7 ns |
+| Query 10 quantiles, cold cache | 1.72 µs | 13.61 µs | — |
 
-```
-zw unbound quantile update
-                        time:   [60.780 us 60.855 us 60.936 us]
-```
-
-```
-gk quantile update      time:   [156.84 us 157.02 us 157.24 us]
-```
-
-**Query performance** (10 quantiles) — ZW is ~1.5x faster:
-
-```
-zw unbound quantile query
-                        time:   [229.62 ns 230.16 ns 230.77 ns]
-```
-
-```
-gk quantile query       time:   [350.21 ns 350.48 ns 350.76 ns]
-```
+ZW caches its merged query summary after the first query. The warm-cache rows measure repeated lookups; the cold-cache rows clone an uncached, prebuilt summary and include rebuilding that merged summary. Results vary by hardware and toolchain.
 
 Run benchmarks yourself with:
 

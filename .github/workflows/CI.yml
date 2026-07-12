@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-tarpaulin
+      - uses: taiki-e/install-action@cargo-tarpaulin
       - run: cargo tarpaulin --all-features --out xml
       - uses: codecov/codecov-action@v4
         with:
