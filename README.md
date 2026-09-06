@@ -51,7 +51,7 @@ let p99 = summary.query(0.99).unwrap();
 
 ### UnboundEpsilonSummary
 
-Use when the stream size is not known in advance. It dynamically manages internal summaries as the stream grows.
+Use when the stream size is not known in advance. It splits the stream into sub-streams of geometrically growing length, freezes a compressed summary for each completed sub-stream, and merges them at query time. There is no fixed limit on the number of elements.
 
 ```rust
 use zw_fast_quantile::UnboundEpsilonSummary;
@@ -76,9 +76,10 @@ Both constructors and `query()` return `Result<_, QuantileError>`:
 use zw_fast_quantile::{FixedSizeEpsilonSummary, QuantileError};
 
 // Invalid parameters
-assert!(FixedSizeEpsilonSummary::<usize>::new(0, 0.1).is_err());     // n must be > 0
-assert!(FixedSizeEpsilonSummary::<usize>::new(10, -0.1).is_err());   // epsilon must be positive
-assert!(FixedSizeEpsilonSummary::<usize>::new(10, f64::NAN).is_err()); // epsilon must be finite
+assert!(FixedSizeEpsilonSummary::<usize>::new(0, 0.1).is_err());       // n must be > 0
+assert!(FixedSizeEpsilonSummary::<usize>::new(10, -0.1).is_err());     // epsilon must be in (0, 1]
+assert!(FixedSizeEpsilonSummary::<usize>::new(10, 1.5).is_err());      // epsilon must be in (0, 1]
+assert!(FixedSizeEpsilonSummary::<usize>::new(10, f64::NAN).is_err()); // NaN and infinity are rejected
 
 // Query errors
 let s = FixedSizeEpsilonSummary::<usize>::new(10, 0.1).unwrap();
@@ -87,7 +88,7 @@ assert!(s.query(0.5).is_err());  // EmptySummary — no values inserted
 
 ### Choosing Epsilon
 
-The `epsilon` parameter controls the trade-off between accuracy and memory:
+The `epsilon` parameter must be in `(0, 1]` and controls the trade-off between accuracy and memory:
 
 | Epsilon | Max Error | Relative Memory |
 |---------|-----------|-----------------|
@@ -97,15 +98,17 @@ The `epsilon` parameter controls the trade-off between accuracy and memory:
 
 A query for rank `r` on a stream of `n` elements will return an element whose true rank is within `r ± epsilon` (i.e., the result is within `epsilon * n` positions of the exact answer).
 
+Very short streams are a special case: when `epsilon * n` is at most 8, the summary simply keeps every element and answers queries exactly, because the Zhang-Wang block size is not meaningful for such small `epsilon * n`.
+
 ## Benchmarks
 
-Benchmarked against GK01 from the [quantiles](https://github.com/postmates/quantiles) crate with 5,000 values and `epsilon = 0.01`. Representative Criterion medians from July 2026 are:
+Benchmarked against GK01 from the [quantiles](https://github.com/postmates/quantiles) crate with 5,000 values and `epsilon = 0.01`. Representative Criterion medians from September 2026 (version 1.0.1) are:
 
 | Operation | ZW fixed | ZW unbounded | GK01 |
 |-----------|---------:|-------------:|-----:|
-| Insert 5,000 values | 26.23 µs | 36.62 µs | 104.24 µs |
-| Query 10 quantiles, warm cache | 120.4 ns | 145.6 ns | 127.7 ns |
-| Query 10 quantiles, cold cache | 1.72 µs | 13.61 µs | — |
+| Insert 5,000 values | 21.05 µs | 31.32 µs | 104.48 µs |
+| Query 10 quantiles, warm cache | 96.7 ns | 135.3 ns | 130.4 ns |
+| Query 10 quantiles, cold cache | 1.39 µs | 15.16 µs | — |
 
 ZW caches its merged query summary after the first query. The warm-cache rows measure repeated lookups; the cold-cache rows clone an uncached, prebuilt summary and include rebuilding that merged summary. Results vary by hardware and toolchain.
 
@@ -117,7 +120,7 @@ cargo bench
 
 ## Optional Features
 
-- **`serde`** — Enable serialization/deserialization support via [serde](https://serde.rs/). Cache fields are skipped during serialization and lazily rebuilt on the next query.
+- **`serde`** — Enable serialization/deserialization support via [serde](https://serde.rs/). Cache fields are skipped during serialization and lazily rebuilt on the next query. The serialized layout is an implementation detail and may change between releases; do not rely on it for long-term storage without pinning the crate version.
 
   ```toml
   [dependencies]

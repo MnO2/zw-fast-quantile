@@ -26,7 +26,7 @@ RankInfo { val: T, rmin: i64, rmax: i64 }
 - `rmin` — the minimum possible rank of this element
 - `rmax` — the maximum possible rank of this element
 
-The interval `[rmin, rmax]` captures the uncertainty introduced by compression. As summaries are merged and compressed, these bounds widen but remain within the epsilon guarantee.
+Ranks are one-based throughout the crate, matching the paper: a freshly sorted block of `b` elements gets `rmin = rmax = 1, 2, ..., b`. The interval `[rmin, rmax]` captures the uncertainty introduced by compression. As summaries are merged and compressed, these bounds widen but remain within the epsilon guarantee.
 
 ## Operations
 
@@ -34,64 +34,64 @@ The interval `[rmin, rmax]` captures the uncertainty introduced by compression. 
 
 New elements are inserted into a level-0 buffer (`s[0]`). When this buffer reaches the block size `b`:
 
-1. **Sort** the buffer and assign exact ranks (`rmin = rmax = position`).
+1. **Sort** the buffer and assign exact one-based ranks (`rmin = rmax = position`).
 2. **Compress** the sorted buffer to roughly `b/2` entries by selecting a subset that preserves the rank coverage.
-3. **Propagate** the compressed summary upward through levels: if level `k` is empty, store there; otherwise, merge with level `k`, compress the result, clear level `k`, and continue to level `k+1`.
+3. **Propagate** the compressed summary upward through levels: if level `k` is empty, store there; otherwise, take the summary stored at level `k`, merge it with the incoming one, compress the result, and continue to level `k+1`.
 
 This cascading merge is analogous to binary counting — level `k` is "full" roughly every `2^k` blocks, giving logarithmic levels.
 
 ### Merge
 
-Merging two sorted summaries `S_a` and `S_b` produces a combined summary `S_m` where each element's rank bounds are updated to account for elements from the other summary:
+Merging two sorted summaries `S_a` and `S_b` produces a combined summary `S_m` where each element's rank bounds are updated to account for elements from the other summary. For an element `e` from `S_a`, let `pred` be the largest element of `S_b` below `e` and `succ` the smallest element of `S_b` above it:
 
-- **rmin**: the element's own `rmin` plus the `rmin` of the predecessor element in the other summary (or 0 if it comes first).
-- **rmax**: the element's own `rmax` plus the `rmax` of the next element in the other summary, minus 1 (to avoid double-counting).
+- **rmin**: `rmin_a(e) + rmin_b(pred)`, or just `rmin_a(e)` when there is no predecessor.
+- **rmax**: `rmax_a(e) + rmax_b(succ) - 1`, or `rmax_a(e) + rmax_b(pred)` when there is no successor.
 
-The merge proceeds like a standard sorted-list merge, advancing through both inputs in order.
+These are the one-based formulas from the paper; they only hold because sorted blocks are ranked from 1. The merge proceeds like a standard sorted-list merge, advancing through both inputs in order and moving elements rather than cloning them whenever the input is owned.
 
 ### Compress
 
-Compression reduces a summary of size `n` to at most `block_size` entries while preserving the epsilon guarantee. It works by:
+Compression reduces a summary of size `n` to at most `block_size + 1` entries while preserving the epsilon guarantee. It works by:
 
 1. Computing `s0_range`, the maximum `rmax` in the summary.
 2. Dividing the rank space `[0, s0_range]` into `block_size` equal intervals.
 3. For each interval boundary, selecting the first element whose `rmax` reaches or exceeds that boundary.
 
-This ensures uniform coverage of the rank space. The precision condition `2 * epsilon * range >= max(rmax - rmin)` is asserted to verify the error bound is maintained.
+This ensures uniform coverage of the rank space. Every input to compress must already satisfy the precision condition `2 * epsilon * range >= max(rmax - rmin)`; the constructor's block sizing guarantees it, and debug builds assert it.
 
 ### Query
 
-Querying rank `r`:
+Querying rank `r` on a summary of `n` elements:
 
-1. Compute the target rank: `rank = floor(r * n)`.
+1. Compute the one-based target rank: `rank = min(floor(r * n) + 1, n)`.
 2. Compute the error window: `epsilon_n = floor(epsilon * n)`.
-3. Build a merged summary `S_m` from all levels (cached after first build, invalidated on update).
-4. Binary search for the first element with `rmin >= rank`.
-5. Scan forward to find an element with `rmax <= rank + epsilon_n` — this element's true rank is guaranteed to be within the tolerance.
-6. If no such element is found, return the last element.
+3. Build a merged summary `S_m` from all levels (cached after the first build, invalidated on update).
+4. Binary search for the first element with `rmin >= rank`, then scan forward while `rmin <= rank + epsilon_n` for an element with `rmax <= rank + epsilon_n`.
+5. If none is found, scan backward over the elements with `rmin >= rank - epsilon_n`; any of them with `rmax <= rank + epsilon_n` also satisfies the guarantee.
+6. As a last resort, return the element whose rank interval is centred closest to `rank`. This never happens for summaries built by the crate, but it keeps a query from silently returning the maximum element.
 
 ## FixedSizeEpsilonSummary
 
-When the stream size `n` is known upfront:
+When the stream size `n` is known upfront and `epsilon * n > 8`:
 
-- **Number of levels** = `ceil(log2(epsilon * n))` (or 1 when `epsilon * n <= 1`)
-- **Block size** `b` = `floor(log2(epsilon * n) / epsilon)` (or `n + 1` when only 1 level)
+- **Block size** `b` = `floor(log2(epsilon * n) / epsilon)`
+- **Number of levels** = bit width of `floor(n / b)`, plus one for level 0. Full blocks propagate through the levels like binary carries, so the level count is the number of bits needed to count them.
 
-Knowing `n` allows pre-allocating the exact number of levels and optimal block size.
+When `epsilon * n <= 8` the summary switches to **exact mode**: a single level with `b = n + 1` that never fills, so every element is kept and queries are exact. The ZW block size is only meaningful once `log2(epsilon * n)` is comfortably above 1; below that the derived blocks become too small (down to a single element) and neither the precision condition nor the rank-error guarantee can hold. Exact mode costs at most `8 / epsilon` stored elements, the same order as a single block.
 
 ## UnboundEpsilonSummary
 
 When the stream size is unknown, the algorithm uses a doubling strategy:
 
-1. Maintain a "current" `FixedSizeEpsilonSummary` (`s_c`) sized for the next power-of-two boundary.
-2. Track **boundaries** at positions `floor((2^i - 1) / epsilon)` for `i = 0, 1, 2, ...`
-3. When the count hits a boundary at index `x`:
+1. Maintain a "current" `FixedSizeEpsilonSummary` (`s_c`) sized for the current sub-stream.
+2. Sub-stream boundaries lie at positions `floor((2^x - 1) / epsilon)` for `x = 1, 2, ...`; the next boundary is computed on demand and tracked with a counter, so there is no table to exhaust.
+3. When the count reaches boundary `x`:
    - Finalize `s_c` (compress all its levels into a single summary).
-   - Push `s_c` onto a stack of completed summaries.
-   - Create a new `s_c` sized for the interval up to boundary `2x`.
+   - Push `s_c` onto a list of completed summaries.
+   - Create a new `s_c` sized for the interval up to boundary `x + 1`.
 4. At query time, merge all completed summaries with the current `s_c`.
 
-This ensures each completed summary covers a geometrically growing interval, maintaining the epsilon/2 guarantee per summary and epsilon overall after merging.
+Each sub-stream summary is built with `epsilon / 2`, so the merged result stays within `epsilon` overall. Short sub-streams (`epsilon * n_i <= 8`) use exact mode like any other fixed-size summary.
 
 ## Query Caching
 
@@ -100,6 +100,6 @@ Both summary types cache the merged summary (`cached_s_m`) using `RefCell<Option
 ## Space Complexity
 
 - **FixedSizeEpsilonSummary**: `O((1/epsilon) * log(epsilon * n))` elements stored across all levels.
-- **UnboundEpsilonSummary**: `O((1/epsilon) * log^2(epsilon * n))` due to the stack of completed summaries.
+- **UnboundEpsilonSummary**: `O((1/epsilon) * log^2(epsilon * n))` due to the list of completed summaries.
 
 In practice, for `epsilon = 0.01` and `n = 1,000,000`, the summaries store a few thousand entries rather than the full million.

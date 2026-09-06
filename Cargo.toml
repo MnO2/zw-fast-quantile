@@ -1,14 +1,16 @@
 [package]
 name = "zw-fast-quantile"
-version = "1.0.0"
+version = "1.0.1"
 repository = "https://github.com/MnO2/zw-fast-quantile"
 license = "Apache-2.0"
 description = "Zhang-Wang fast quantile algorithm in Rust"
 authors = ["Paul Meng <me@paulme.ng>"]
 readme = "README.md"
-keywords = ["quantile", "statistics"]
+keywords = ["quantile", "statistics", "streaming", "approximate", "percentile"]
+categories = ["algorithms", "data-structures"]
 edition = "2021"
 rust-version = "1.65"
+exclude = ["docs/plans/", ".github/"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
